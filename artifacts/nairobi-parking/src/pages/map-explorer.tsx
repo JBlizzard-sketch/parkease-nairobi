@@ -67,16 +67,13 @@ export default function MapExplorer() {
     if (!data?.spots) return [];
     return data.spots.filter((spot) => {
       if (filterZone !== "All" && spot.zone !== filterZone) return false;
-      if (filterTypes.length > 0 && !filterTypes.includes(spot.spotType ?? "")) return false;
       if (spot.pricePerHour > filterMaxPrice) return false;
       if (filterCctv && !spot.hasCctv) return false;
-      if (filterRoofed && !spot.hasRoofing) return false;
-      if (filterGated && !spot.hasGate) return false;
       if (filterSurge && spot.surgeMultiplier <= 1) return false;
       if (searchText && !spot.title.toLowerCase().includes(searchText.toLowerCase())) return false;
       return true;
     });
-  }, [data?.spots, filterZone, filterTypes, filterMaxPrice, filterCctv, filterRoofed, filterGated, filterSurge, searchText]);
+  }, [data?.spots, filterZone, filterMaxPrice, filterCctv, filterSurge, searchText]);
 
   const ZONE_CENTERS: Record<string, [number, number]> = {
     Westlands: [-1.2672, 36.8102],

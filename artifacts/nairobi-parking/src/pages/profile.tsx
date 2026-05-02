@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useGetMe, useListBookings, useListReviews, useUpdateMe, getGetMeQueryKey } from "@workspace/api-client-react";
+import { useGetMe, useListBookings, useListReviews, useUpdateMe, getGetMeQueryKey, getListBookingsQueryKey, getListReviewsQueryKey } from "@workspace/api-client-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,14 +36,16 @@ export default function Profile() {
     { query: { enabled: !!userId, queryKey: getGetMeQueryKey({ userId: userId ?? 0 }) } }
   );
 
+  const bookingsParams = { userId: userId ?? undefined, role: "commuter" as const, limit: 50 };
   const { data: bookingsData } = useListBookings(
-    { userId: userId ?? undefined, role: "commuter", limit: 50 },
-    { query: { enabled: !!userId } }
+    bookingsParams,
+    { query: { enabled: !!userId, queryKey: getListBookingsQueryKey(bookingsParams) } }
   );
 
+  const reviewsParams = { revieweeId: userId ?? undefined };
   const { data: reviewsData } = useListReviews(
-    { revieweeId: userId ?? undefined },
-    { query: { enabled: !!userId } }
+    reviewsParams,
+    { query: { enabled: !!userId, queryKey: getListReviewsQueryKey(reviewsParams) } }
   );
 
   const updateMe = useUpdateMe({

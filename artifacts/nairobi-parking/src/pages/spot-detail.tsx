@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useParams, useLocation } from "wouter";
-import { useGetSpot, useGetSurgePricing, useCreateBooking, useListReviews, getGetSpotQueryKey } from "@workspace/api-client-react";
+import { useGetSpot, useGetSurgePricing, useCreateBooking, useListReviews, getGetSpotQueryKey, getGetSurgePricingQueryKey } from "@workspace/api-client-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,7 +36,7 @@ export default function SpotDetail() {
   const surgeZone = spot?.zone ?? null;
   const { data: surge } = useGetSurgePricing(
     { zone: surgeZone ?? "NONE", date },
-    { query: { enabled: !!surgeZone } }
+    { query: { enabled: !!surgeZone, queryKey: getGetSurgePricingQueryKey({ zone: surgeZone ?? "NONE", date }) } }
   );
 
   const { data: reviews } = useListReviews({ spotId: id });

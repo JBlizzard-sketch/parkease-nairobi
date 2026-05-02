@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useLocation } from 'wouter';
-import type { UserRole } from '@workspace/api-client-react/src/generated/api.schemas';
+import type { UserRole } from '@workspace/api-client-react';
 
 export function useCurrentUser() {
   const [userId, setUserId] = useState<number | null>(null);
