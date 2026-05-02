@@ -1,14 +1,19 @@
+import { useState, useMemo } from "react";
 import { useGetOwnerDashboard, useListBookings, getGetOwnerDashboardQueryKey, getListBookingsQueryKey } from "@workspace/api-client-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from "recharts";
-import { Wallet, Car, Activity, Star, Plus, Settings, Bell, TrendingUp, ChevronRight, AlertCircle, MapPin, CheckCircle2 } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell, LabelList } from "recharts";
+import { Wallet, Car, Activity, Star, Plus, Settings, Bell, TrendingUp, ChevronRight, AlertCircle, MapPin, Clock, BarChart2 } from "lucide-react";
 import { Link } from "wouter";
+import { cn } from "@/lib/utils";
+
+type SpotMetric = "earnings" | "bookings" | "rating";
 
 export default function OwnerDashboard() {
   const { userId } = useCurrentUser();
+  const [spotMetric, setSpotMetric] = useState<SpotMetric>("earnings");
 
   const { data: dashboard, isLoading } = useGetOwnerDashboard(
     { ownerId: userId || 0 },
@@ -21,11 +26,43 @@ export default function OwnerDashboard() {
   );
 
   const { data: recentActivity } = useListBookings(
-    { userId: userId ?? undefined, role: "owner", limit: 8 },
-    { query: { enabled: !!userId, queryKey: getListBookingsQueryKey({ userId: userId ?? undefined, role: "owner", limit: 8 }) } }
+    { userId: userId ?? undefined, role: "owner", limit: 100 },
+    { query: { enabled: !!userId, queryKey: getListBookingsQueryKey({ userId: userId ?? undefined, role: "owner", limit: 100 }) } }
   );
 
   const pendingCount = pendingBookings?.total ?? 0;
+
+  const { hourlyData, spotComparisonData } = useMemo(() => {
+    const allBk = recentActivity?.bookings ?? [];
+
+    // Hourly distribution: count bookings by startHour (6am–10pm)
+    const hourCounts: Record<number, number> = {};
+    for (let h = 6; h <= 22; h++) hourCounts[h] = 0;
+    for (const b of allBk) {
+      if (b.startHour >= 6 && b.startHour <= 22) hourCounts[b.startHour]++;
+    }
+    const hourlyData = Object.entries(hourCounts).map(([h, count]) => {
+      const hour = Number(h);
+      const label = `${hour % 12 || 12}${hour < 12 ? "a" : "p"}`;
+      return { hour, label, count };
+    });
+
+    // Per-spot aggregation
+    const spotMap: Record<number, { id: number; title: string; bookings: number; earnings: number; zone: string }> = {};
+    for (const b of allBk) {
+      const sid = (b as any).spotId ?? 0;
+      if (!spotMap[sid]) spotMap[sid] = { id: sid, title: b.spotTitle ?? "Unknown", bookings: 0, earnings: 0, zone: "" };
+      spotMap[sid].bookings++;
+      if (b.status === "completed" || b.status === "confirmed") {
+        spotMap[sid].earnings += b.ownerEarning;
+      }
+    }
+    const spotComparisonData = Object.values(spotMap)
+      .sort((a, b) => b.earnings - a.earnings)
+      .slice(0, 6);
+
+    return { hourlyData, spotComparisonData };
+  }, [recentActivity]);
 
   if (!userId) return <div className="p-8 text-center text-muted-foreground">Please login as owner.</div>;
 
@@ -244,6 +281,173 @@ export default function OwnerDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── Spot Performance Comparison ── */}
+      {dashboard.topSpots.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <BarChart2 className="h-4 w-4 text-primary" />
+                Spot Performance
+              </CardTitle>
+              <div className="flex rounded-lg border border-border overflow-hidden text-xs">
+                {(["earnings", "bookings", "rating"] as SpotMetric[]).map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setSpotMetric(m)}
+                    className={cn(
+                      "px-3 py-1 capitalize transition-colors",
+                      spotMetric === m ? "bg-primary text-white font-semibold" : "hover:bg-muted text-muted-foreground"
+                    )}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="h-52">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  layout="vertical"
+                  data={dashboard.topSpots.map((s) => ({
+                    name: s.title.length > 18 ? s.title.slice(0, 16) + "…" : s.title,
+                    earnings: s.earnings,
+                    bookings: s.bookings,
+                    rating: s.rating ?? 0,
+                  }))}
+                  margin={{ top: 0, right: 64, bottom: 0, left: 4 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" />
+                  <XAxis
+                    type="number"
+                    stroke="hsl(var(--muted-foreground))"
+                    fontSize={10}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(v) =>
+                      spotMetric === "earnings" ? `${(v / 1000).toFixed(0)}k` :
+                      spotMetric === "rating" ? v.toFixed(1) : String(v)
+                    }
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    width={110}
+                    stroke="hsl(var(--muted-foreground))"
+                    fontSize={11}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <Tooltip
+                    cursor={{ fill: "hsl(var(--muted)/0.4)" }}
+                    contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }}
+                    formatter={(val: number) =>
+                      spotMetric === "earnings" ? [`KES ${val.toLocaleString()}`, "Earnings"] :
+                      spotMetric === "rating" ? [`${val.toFixed(1)} ★`, "Rating"] :
+                      [val, "Bookings"]
+                    }
+                  />
+                  <Bar dataKey={spotMetric} radius={[0, 4, 4, 0]} maxBarSize={22}>
+                    <LabelList
+                      dataKey={spotMetric}
+                      position="right"
+                      style={{ fontSize: "11px", fill: "hsl(var(--muted-foreground))" }}
+                      formatter={(v: number) =>
+                        spotMetric === "earnings" ? `KES ${(v / 1000).toFixed(0)}k` :
+                        spotMetric === "rating" ? `${v.toFixed(1)}★` : String(v)
+                      }
+                    />
+                    {dashboard.topSpots.map((_, i) => (
+                      <Cell
+                        key={i}
+                        fill={
+                          spotMetric === "earnings" ? `hsl(var(--primary)/${Math.max(0.35, 1 - i * 0.12)})` :
+                          spotMetric === "bookings" ? `hsl(217 91% 60%/${Math.max(0.35, 1 - i * 0.12)})` :
+                          `hsl(43 96% 56%/${Math.max(0.35, 1 - i * 0.12)})`
+                        }
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Booking Hour Distribution ── */}
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Clock className="h-4 w-4 text-blue-500" />
+              Booking Hour Distribution
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">When your spots get booked most</p>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {hourlyData.every((d) => d.count === 0) ? (
+            <div className="h-40 flex items-center justify-center text-muted-foreground text-sm">
+              No booking data yet — comes alive once you have confirmed bookings
+            </div>
+          ) : (
+            <div className="h-44">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={hourlyData} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                  <XAxis dataKey="label" stroke="hsl(var(--muted-foreground))" fontSize={10} tickLine={false} axisLine={false} />
+                  <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} tickLine={false} axisLine={false} allowDecimals={false} width={24} />
+                  <Tooltip
+                    cursor={{ fill: "hsl(var(--muted)/0.5)" }}
+                    contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }}
+                    labelFormatter={(label) => `${label} slot`}
+                    formatter={(val: number) => [val, "Bookings"]}
+                  />
+                  <Bar dataKey="count" radius={[3, 3, 0, 0]} maxBarSize={28}>
+                    {hourlyData.map((d, i) => {
+                      const maxCount = Math.max(...hourlyData.map((h) => h.count), 1);
+                      const intensity = d.count / maxCount;
+                      const isPeak = d.count === maxCount && d.count > 0;
+                      return (
+                        <Cell
+                          key={i}
+                          fill={
+                            isPeak
+                              ? "hsl(var(--primary))"
+                              : intensity > 0.6
+                              ? "hsl(var(--primary)/0.65)"
+                              : intensity > 0.3
+                              ? "hsl(var(--primary)/0.4)"
+                              : "hsl(var(--primary)/0.18)"
+                          }
+                        />
+                      );
+                    })}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+          {/* Peak hour callout */}
+          {hourlyData.some((d) => d.count > 0) && (() => {
+            const peak = hourlyData.reduce((best, d) => d.count > best.count ? d : best, hourlyData[0]);
+            const total = hourlyData.reduce((s, d) => s + d.count, 0);
+            const pct = total > 0 ? Math.round((peak.count / total) * 100) : 0;
+            return (
+              <div className="mt-3 flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-lg px-3 py-2">
+                <Star className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                <p className="text-xs text-muted-foreground">
+                  <span className="font-semibold text-foreground">{peak.label}</span> is your peak hour — {pct}% of all bookings land in this slot. Consider enabling surge pricing then.
+                </p>
+              </div>
+            );
+          })()}
+        </CardContent>
+      </Card>
 
       {/* Recent Activity */}
       {(recentActivity?.bookings ?? []).length > 0 && (
