@@ -12,8 +12,9 @@ import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { SlidersHorizontal, Shield, Star, Zap, MapPin, Map, List, Heart, ArrowUpDown, LocateFixed } from "lucide-react";
+import { SlidersHorizontal, Shield, Star, Zap, MapPin, Map, List, Heart, ArrowUpDown, LocateFixed, History } from "lucide-react";
 import { useFavorites } from "@/hooks/use-favorites";
+import { useRecentlyViewed } from "@/hooks/use-recently-viewed";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -59,6 +60,7 @@ export default function MapExplorer() {
   const [sortBy, setSortBy] = useState<SortKey>("default");
 
   const { isFavorite, toggle: toggleFavorite } = useFavorites();
+  const { recentIds } = useRecentlyViewed();
   const { toast } = useToast();
 
   useEffect(() => {
@@ -102,6 +104,14 @@ export default function MapExplorer() {
       default: return spots;
     }
   }, [data?.spots, filterZone, filterMaxPrice, filterCctv, filterSurge, filterMinRating, searchText, sortBy]);
+
+  const recentSpots = useMemo(() => {
+    if (!data?.spots || recentIds.length === 0) return [];
+    return recentIds
+      .map((id) => data.spots.find((s) => s.id === id))
+      .filter((s): s is MapSpot => s !== undefined)
+      .slice(0, 6);
+  }, [recentIds, data?.spots]);
 
   const ZONE_CENTERS: Record<string, [number, number]> = {
     Westlands: [-1.2672, 36.8102], CBD: [-1.2874, 36.8216],
@@ -460,6 +470,32 @@ export default function MapExplorer() {
               </div>
             </div>
           </div>
+
+          {/* Recently Viewed strip */}
+          {recentSpots.length > 0 && !searchText && (
+            <div className="px-3 pt-2.5 pb-3 border-b border-border flex-shrink-0">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                <History className="h-3.5 w-3.5" />
+                Recently Viewed
+              </p>
+              <div className="flex gap-2 overflow-x-auto pb-0.5 scrollbar-none -mx-0.5 px-0.5">
+                {recentSpots.map((spot) => (
+                  <button
+                    key={spot.id}
+                    onClick={() => setLocation(`/spots/${spot.id}`)}
+                    className="flex-shrink-0 w-[120px] bg-background border border-border rounded-xl p-2.5 text-left hover:border-primary/50 hover:shadow-sm transition-all group"
+                  >
+                    <p className="text-[11px] font-semibold leading-snug line-clamp-2 group-hover:text-primary transition-colors">{spot.title}</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{spot.zone}</p>
+                    <div className="flex items-center justify-between mt-1.5">
+                      <span className="text-[11px] font-bold text-primary">KES {spot.pricePerHour}</span>
+                      {spot.rating && <span className="text-[10px] text-amber-500">★{spot.rating.toFixed(1)}</span>}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Spot list */}
           <div className="overflow-y-auto flex-1 p-3 space-y-2.5">

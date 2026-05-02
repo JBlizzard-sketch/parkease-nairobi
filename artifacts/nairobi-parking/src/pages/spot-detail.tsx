@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
 import { useGetSpot, useGetSurgePricing, useCreateBooking, useListReviews, useListBookings, useCreateReview, useListSpots, getGetSpotQueryKey, getGetSurgePricingQueryKey, getListBookingsQueryKey, getListSpotsQueryKey } from "@workspace/api-client-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useFavorites } from "@/hooks/use-favorites";
+import { useRecentlyViewed } from "@/hooks/use-recently-viewed";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -200,6 +201,12 @@ export default function SpotDetail() {
     userBookingsParams,
     { query: { enabled: !!userId, queryKey: getListBookingsQueryKey(userBookingsParams) } }
   );
+
+  const { addToRecent } = useRecentlyViewed();
+  useEffect(() => {
+    if (spot?.id) addToRecent(spot.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spot?.id]);
 
   const createReview = useCreateReview({
     mutation: {
