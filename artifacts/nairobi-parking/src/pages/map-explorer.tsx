@@ -365,7 +365,6 @@ export default function MapExplorer() {
                   <option value="price_asc">Price: Low → High</option>
                   <option value="price_desc">Price: High → Low</option>
                   <option value="rating">Best Rated</option>
-                  <option value="popular">Most Popular</option>
                 </select>
               </div>
             </div>

@@ -49,6 +49,13 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
   );
   const pendingCount = pendingBookingsData?.total ?? 0;
 
+  const isCommuterOnly = role === "commuter";
+  const { data: commuterPendingData } = useListBookings(
+    { userId: userId ?? 0, role: "commuter", status: "pending", limit: 50 },
+    { query: { enabled: !!userId && isCommuterOnly, queryKey: ["commuter-pending-bell", userId] } }
+  );
+  const commuterPendingCount = commuterPendingData?.total ?? 0;
+
   const NavLink = ({ href, label, ownerStyle = false }: { href: string; label: string; ownerStyle?: boolean }) => (
     <Link
       href={href}
@@ -97,7 +104,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
             {isOwner && <NavLink href="/owner/dashboard" label="Owner" ownerStyle />}
             <NavLink href="/admin" label="Analytics" />
 
-            {/* Notification Bell (owners only) */}
+            {/* Notification Bell — owners: pending requests; commuters: unpaid bookings */}
             {isAuthenticated && isOwner && (
               <Link href="/owner/bookings" className="relative">
                 <button
@@ -113,6 +120,19 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                       {pendingCount > 9 ? "9+" : pendingCount}
                     </span>
                   )}
+                </button>
+              </Link>
+            )}
+            {isAuthenticated && isCommuterOnly && commuterPendingCount > 0 && (
+              <Link href="/bookings" className="relative">
+                <button
+                  className="relative p-1.5 rounded-lg transition-colors hover:bg-muted text-muted-foreground"
+                  title={`${commuterPendingCount} booking${commuterPendingCount > 1 ? "s" : ""} awaiting payment`}
+                >
+                  <Bell className="h-5 w-5" />
+                  <span className="absolute -top-0.5 -right-0.5 bg-amber-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-0.5 leading-none animate-pulse">
+                    {commuterPendingCount > 9 ? "9+" : commuterPendingCount}
+                  </span>
                 </button>
               </Link>
             )}
@@ -166,6 +186,15 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                       </Link>
                     </DropdownMenuItem>
                   )}
+                  {isCommuterOnly && commuterPendingCount > 0 && (
+                    <DropdownMenuItem asChild>
+                      <Link href="/bookings" className="flex items-center gap-2 cursor-pointer text-amber-700 focus:text-amber-700">
+                        <Bell className="h-4 w-4" />
+                        <span>Pay Now</span>
+                        <span className="ml-auto bg-amber-500 text-white text-xs rounded-full px-1.5 py-0.5 leading-none">{commuterPendingCount}</span>
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
                   {isAdmin && (
                     <DropdownMenuItem asChild>
                       <Link href="/admin" className="flex items-center gap-2 cursor-pointer text-purple-600 focus:text-purple-600">
@@ -199,6 +228,14 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                     {pendingCount > 9 ? "9+" : pendingCount}
                   </span>
                 )}
+              </Link>
+            )}
+            {isAuthenticated && isCommuterOnly && commuterPendingCount > 0 && (
+              <Link href="/bookings" className="relative p-2">
+                <Bell className="h-5 w-5 text-muted-foreground" />
+                <span className="absolute top-1 right-1 bg-amber-500 text-white text-[9px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center leading-none">
+                  {commuterPendingCount > 9 ? "9+" : commuterPendingCount}
+                </span>
               </Link>
             )}
             {isAuthenticated && me && userId && (
