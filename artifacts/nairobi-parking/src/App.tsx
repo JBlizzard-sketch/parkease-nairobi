@@ -13,6 +13,7 @@ import MyBookings from "@/pages/my-bookings";
 import Waitlist from "@/pages/waitlist";
 import Login from "@/pages/login";
 
+import Profile from "@/pages/profile";
 import OwnerDashboard from "@/pages/owner/dashboard";
 import OwnerSpots from "@/pages/owner/spots";
 import OwnerNewSpot from "@/pages/owner/new-spot";
