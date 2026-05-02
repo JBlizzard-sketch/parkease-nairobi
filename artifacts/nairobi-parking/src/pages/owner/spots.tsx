@@ -6,6 +6,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -22,6 +27,7 @@ export default function OwnerSpots() {
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<SortKey>("bookings");
   const [filter, setFilter] = useState<FilterKey>("all");
+  const [deleteTarget, setDeleteTarget] = useState<{ id: number; title: string } | null>(null);
 
   const { data, isLoading } = useListSpots(
     { ownerId: userId ?? undefined },
@@ -41,7 +47,12 @@ export default function OwnerSpots() {
     mutation: {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListSpotsQueryKey({ ownerId: userId ?? undefined }) });
-        toast({ title: "Spot removed" });
+        toast({ title: "Spot removed", description: `"${deleteTarget?.title}" has been deleted.` });
+        setDeleteTarget(null);
+      },
+      onError: () => {
+        toast({ title: "Failed to delete spot", variant: "destructive" });
+        setDeleteTarget(null);
       },
     },
   });
@@ -50,10 +61,9 @@ export default function OwnerSpots() {
     updateSpot.mutate({ id, data: { isActive: !isActive } });
   };
 
-  const handleDelete = (id: number, title: string) => {
-    if (confirm(`Remove "${title}" from ParkEase?`)) {
-      deleteSpot.mutate({ id });
-    }
+  const confirmDelete = () => {
+    if (!deleteTarget) return;
+    deleteSpot.mutate({ id: deleteTarget.id });
   };
 
   if (!userId) return <div className="p-8 text-center text-muted-foreground">Please log in as an owner.</div>;
@@ -61,8 +71,9 @@ export default function OwnerSpots() {
   const allSpots = data?.spots ?? [];
   const activeCount = allSpots.filter((s) => s.isActive).length;
   const totalBookings = allSpots.reduce((s, sp) => s + sp.totalBookings, 0);
-  const avgRating = allSpots.filter((s) => s.rating).length
-    ? allSpots.filter((s) => s.rating).reduce((s, sp) => s + (sp.rating ?? 0), 0) / allSpots.filter((s) => s.rating).length
+  const ratedSpots = allSpots.filter((s) => s.rating);
+  const avgRating = ratedSpots.length
+    ? ratedSpots.reduce((s, sp) => s + (sp.rating ?? 0), 0) / ratedSpots.length
     : null;
 
   let spots = [...allSpots];
@@ -80,6 +91,37 @@ export default function OwnerSpots() {
 
   return (
     <div className="container mx-auto p-4 max-w-5xl space-y-6 py-8">
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Trash2 className="h-5 w-5 text-destructive" />
+              Remove this spot?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <span className="block">
+                You're about to permanently remove{" "}
+                <span className="font-semibold text-foreground">"{deleteTarget?.title}"</span> from ParkEase.
+              </span>
+              <span className="block text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5 text-sm">
+                ⚠️ Existing confirmed bookings will not be automatically cancelled. Notify affected commuters manually.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep Spot</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className="bg-destructive hover:bg-destructive/90 text-white"
+              disabled={deleteSpot.isPending}
+            >
+              Yes, Remove It
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">My Spots</h1>
@@ -131,7 +173,7 @@ export default function OwnerSpots() {
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search spots..."
+              placeholder="Search by name or zone..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-9"
@@ -186,6 +228,7 @@ export default function OwnerSpots() {
         <div className="text-center py-12 text-muted-foreground">
           <Search className="h-8 w-8 mx-auto mb-3 opacity-30" />
           <p className="font-medium">No spots match "{search}"</p>
+          <button onClick={() => setSearch("")} className="text-xs text-primary hover:underline mt-1">Clear search</button>
         </div>
       )}
 
@@ -210,7 +253,9 @@ export default function OwnerSpots() {
                   </p>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  <span className="text-xs text-muted-foreground">{spot.isActive ? "Active" : "Off"}</span>
+                  <span className={cn("text-xs font-medium", spot.isActive ? "text-emerald-600" : "text-muted-foreground/60")}>
+                    {spot.isActive ? "Live" : "Off"}
+                  </span>
                   <Switch
                     data-testid={`switch-spot-active-${spot.id}`}
                     checked={spot.isActive}
@@ -274,7 +319,8 @@ export default function OwnerSpots() {
                   size="sm"
                   className="text-destructive hover:bg-destructive/10 flex-none gap-1"
                   data-testid={`button-delete-spot-${spot.id}`}
-                  onClick={() => handleDelete(spot.id, spot.title)}
+                  onClick={() => setDeleteTarget({ id: spot.id, title: spot.title })}
+                  disabled={deleteSpot.isPending && deleteTarget?.id === spot.id}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>

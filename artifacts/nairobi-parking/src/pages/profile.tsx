@@ -1,5 +1,8 @@
 import { useState } from "react";
-import { useGetMe, useListBookings, useListReviews, useUpdateMe, getGetMeQueryKey, getListBookingsQueryKey, getListReviewsQueryKey, useListSpots, getListSpotsQueryKey } from "@workspace/api-client-react";
+import {
+  useGetMe, useListBookings, useListReviews, useUpdateMe, useGetSpot,
+  getGetMeQueryKey, getListBookingsQueryKey, getListReviewsQueryKey, useListSpots, getListSpotsQueryKey,
+} from "@workspace/api-client-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useFavorites } from "@/hooks/use-favorites";
 import { useQueryClient } from "@tanstack/react-query";
@@ -10,7 +13,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Star, Car, Calendar, Edit2, Check, X, MapPin, Heart, LogOut, Phone, Mail, Shield, Clock, TrendingUp, Home } from "lucide-react";
+import {
+  Star, Car, Calendar, Edit2, Check, X, MapPin, Heart, LogOut,
+  Phone, Mail, Shield, Clock, TrendingUp, Home, ChevronRight,
+} from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 
@@ -37,12 +43,58 @@ const AVATAR_COLORS = [
   "from-cyan-400 to-cyan-600",
 ];
 
+function FavoriteSpotCard({ spotId, onUnfavorite }: { spotId: number; onUnfavorite: (id: number) => void }) {
+  const { data: spot, isLoading } = useGetSpot(spotId);
+
+  if (isLoading) {
+    return <div className="h-16 bg-muted animate-pulse rounded-xl" />;
+  }
+  if (!spot) {
+    return null;
+  }
+
+  return (
+    <div className="flex items-center gap-3 bg-card border border-border rounded-xl px-3 py-2.5 hover:border-primary/40 transition-colors group">
+      <div className="flex-1 min-w-0">
+        <Link href={`/spots/${spot.id}`} className="block">
+          <p className="font-semibold text-sm leading-tight truncate group-hover:text-primary transition-colors">{spot.title}</p>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+            <span className="flex items-center gap-0.5">
+              <MapPin className="h-3 w-3" />{spot.zone}
+            </span>
+            <span className="font-medium text-foreground">KES {spot.pricePerHour}/hr</span>
+            {spot.rating && (
+              <span className="flex items-center gap-0.5 text-amber-500">
+                <Star className="h-3 w-3 fill-current" />{spot.rating.toFixed(1)}
+              </span>
+            )}
+          </div>
+        </Link>
+      </div>
+      <div className="flex items-center gap-1.5 flex-shrink-0">
+        <Link href={`/spots/${spot.id}`}>
+          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            Book <ChevronRight className="h-3 w-3" />
+          </Button>
+        </Link>
+        <button
+          onClick={() => onUnfavorite(spotId)}
+          className="p-1 text-red-400 hover:text-red-600 transition-colors"
+          title="Remove from saved"
+        >
+          <Heart className="h-4 w-4 fill-current" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function Profile() {
   const { userId, role, logout } = useCurrentUser();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { favorites } = useFavorites();
+  const { favorites, toggle: toggleFavorite } = useFavorites();
 
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState("");
@@ -67,7 +119,7 @@ export default function Profile() {
 
   const { data: spotsData } = useListSpots(
     { ownerId: userId ?? undefined },
-    { query: { enabled: !!userId && role === "owner", queryKey: getListSpotsQueryKey({ ownerId: userId ?? undefined }) } }
+    { query: { enabled: !!userId && (role === "owner" || role === "both"), queryKey: getListSpotsQueryKey({ ownerId: userId ?? undefined }) } }
   );
 
   const updateMe = useUpdateMe({
@@ -214,7 +266,7 @@ export default function Profile() {
         {[
           { label: "Bookings", value: totalBookings, icon: <Car className="h-4 w-4 text-primary" />, sub: `${completedBookings.length} completed` },
           { label: "Hours Parked", value: `${hoursParked}h`, icon: <Clock className="h-4 w-4 text-blue-500" />, sub: "lifetime" },
-          { label: "Total Spent", value: `KES ${(totalSpend / 1000).toFixed(1)}k`, icon: <TrendingUp className="h-4 w-4 text-secondary" />, sub: "on parking" },
+          { label: "Total Spent", value: totalSpend >= 1000 ? `KES ${(totalSpend / 1000).toFixed(1)}k` : `KES ${totalSpend}`, icon: <TrendingUp className="h-4 w-4 text-secondary" />, sub: "on parking" },
           { label: "Avg Rating", value: avgRating ? `${avgRating.toFixed(1)} ★` : "—", icon: <Star className="h-4 w-4 text-amber-500" />, sub: `${reviewsData?.reviews.length ?? 0} reviews` },
         ].map(({ label, value, icon, sub }) => (
           <Card key={label}>
@@ -263,7 +315,7 @@ export default function Profile() {
         </Card>
       )}
 
-      {/* Saved spots */}
+      {/* Saved Spots */}
       {favorites.size > 0 && (
         <Card>
           <CardHeader className="pb-3">
@@ -275,22 +327,19 @@ export default function Profile() {
               <span className="text-xs text-muted-foreground">{favorites.size} saved</span>
             </div>
           </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-2">
-              {Array.from(favorites).slice(0, 6).map((spotId) => (
-                <Link key={spotId} href={`/spots/${spotId}`}>
-                  <div className="flex items-center gap-1.5 bg-muted hover:bg-muted/70 rounded-full px-3 py-1.5 text-sm transition-colors">
-                    <MapPin className="h-3.5 w-3.5 text-primary" />
-                    Spot #{spotId}
-                  </div>
-                </Link>
-              ))}
-              {favorites.size > 6 && (
-                <div className="flex items-center px-3 py-1.5 text-xs text-muted-foreground">
-                  +{favorites.size - 6} more
-                </div>
-              )}
-            </div>
+          <CardContent className="space-y-2">
+            {Array.from(favorites).slice(0, 6).map((spotId) => (
+              <FavoriteSpotCard
+                key={spotId}
+                spotId={spotId}
+                onUnfavorite={toggleFavorite}
+              />
+            ))}
+            {favorites.size > 6 && (
+              <p className="text-xs text-center text-muted-foreground pt-1">
+                +{favorites.size - 6} more saved spots
+              </p>
+            )}
           </CardContent>
         </Card>
       )}
