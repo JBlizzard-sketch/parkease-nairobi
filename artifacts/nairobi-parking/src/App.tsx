@@ -14,6 +14,7 @@ import Waitlist from "@/pages/waitlist";
 import Login from "@/pages/login";
 
 import Profile from "@/pages/profile";
+import AdminAnalytics from "@/pages/admin";
 import OwnerDashboard from "@/pages/owner/dashboard";
 import OwnerSpots from "@/pages/owner/spots";
 import OwnerNewSpot from "@/pages/owner/new-spot";
@@ -34,7 +35,9 @@ function Router() {
         <Route path="/bookings" component={MyBookings} />
         <Route path="/waitlist" component={Waitlist} />
         <Route path="/login" component={Login} />
-        
+        <Route path="/profile" component={Profile} />
+        <Route path="/admin" component={AdminAnalytics} />
+
         <Route path="/owner/dashboard" component={OwnerDashboard} />
         <Route path="/owner/spots" component={OwnerSpots} />
         <Route path="/owner/spots/new" component={OwnerNewSpot} />

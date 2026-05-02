@@ -1,23 +1,12 @@
 import { useGetMe, getGetMeQueryKey } from "@workspace/api-client-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Star } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
 
 const DEMO_USER_IDS = [1, 2, 3, 4, 5, 6];
 
-function UserCard({ userId }: { userId: number }) {
-  const { data: user, isLoading } = useQuery({
-    queryKey: getGetMeQueryKey({ userId }),
-    queryFn: () => useGetMe({ userId }).then(res => res.data), // This is wrong, useGetMe is a hook, we shouldn't call hooks in queryFn.
-    // wait, we can just use useGetMe hook directly.
-  });
-  return null;
-}
-
-// Correct approach: Use the hook inside a subcomponent
 function UserProfileCard({ userId }: { userId: number }) {
   const { data: user, isLoading } = useGetMe({ userId }, { query: { enabled: true, queryKey: getGetMeQueryKey({ userId }) } });
   const { login } = useCurrentUser();

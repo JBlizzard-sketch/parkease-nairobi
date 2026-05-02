@@ -1,4 +1,5 @@
 import { useGetMapSpots } from "@workspace/api-client-react";
+import type { MapSpot } from "@workspace/api-client-react";
 import { useLocation } from "wouter";
 import { useEffect, useState, useMemo } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
@@ -41,15 +42,24 @@ function MapUpdater({ lat, lng, zoom }: { lat: number; lng: number; zoom?: numbe
   return null;
 }
 
-type Spot = NonNullable<ReturnType<typeof useGetMapSpots>["data"]>["spots"][number];
+type Spot = MapSpot;
 
 export default function MapExplorer() {
-  const params = new URLSearchParams(window.location.search);
-  const initialZone = params.get("zone") || "All";
+  const [browserLocation] = useLocation();
+  const qp = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+  const initialZone = qp.get("zone") || "All";
 
   const [, setLocation] = useLocation();
   const [selectedSpotId, setSelectedSpotId] = useState<number | null>(null);
   const [filterZone, setFilterZone] = useState(initialZone);
+
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    const zone = p.get("zone");
+    if (zone && ZONES.includes(zone as any)) {
+      setFilterZone(zone);
+    }
+  }, [browserLocation]);
   const [filterTypes, setFilterTypes] = useState<string[]>([]);
   const [filterMaxPrice, setFilterMaxPrice] = useState(500);
   const [filterCctv, setFilterCctv] = useState(false);
@@ -250,8 +260,6 @@ export default function MapExplorer() {
                         <Shield className="h-3 w-3" /> CCTV
                       </span>
                     )}
-                    {spot.hasRoofing && <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded-full">Roofed</span>}
-                    {spot.hasGate && <span className="text-xs bg-gray-50 text-gray-700 border border-gray-200 px-1.5 py-0.5 rounded-full">Gated</span>}
                     {spot.surgeMultiplier > 1 && (
                       <span className="inline-flex items-center gap-0.5 text-xs bg-red-50 text-red-700 border border-red-200 px-1.5 py-0.5 rounded-full">
                         <Zap className="h-3 w-3" /> ×{spot.surgeMultiplier}

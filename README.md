@@ -84,6 +84,8 @@ parkease-nairobi/
 │           │   ├── my-bookings.tsx           # Commuter booking history
 │           │   ├── waitlist.tsx              # Zone waitlist
 │           │   ├── login.tsx                 # Demo persona picker
+│           │   ├── profile.tsx               # User profile + booking history
+│           │   ├── admin.tsx                 # Platform analytics dashboard
 │           │   └── owner/
 │           │       ├── dashboard.tsx         # Earnings + stats
 │           │       ├── spots.tsx             # Spot listing + toggle/edit/delete

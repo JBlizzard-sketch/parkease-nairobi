@@ -166,7 +166,7 @@ export default function SpotDetail() {
                   <span
                     key={day}
                     className={`px-2 py-0.5 rounded text-xs font-medium ${
-                      spot.availableDays.includes(day)
+                      (spot.availableDays as string[]).includes(day)
                         ? "bg-primary text-white"
                         : "bg-muted text-muted-foreground"
                     }`}
