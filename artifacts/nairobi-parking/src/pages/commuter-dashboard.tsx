@@ -635,33 +635,168 @@ export default function CommuterDashboard() {
       {/* Parking Activity Heatmap */}
       <ParkingHeatmap bookings={completed} />
 
-      {/* Loyalty progress */}
-      {nextTier && (
-        <Card className="border-border/60 bg-gradient-to-r from-primary/5 to-transparent">
-          <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center gap-4">
-            <div className="flex items-center gap-3 flex-1">
-              <span className="text-3xl">{tier.icon}</span>
-              <div className="flex-1">
-                <p className="font-semibold text-sm">
-                  {stats.totalTrips} of {nextTier.tier.minTrips} trips to {nextTier.tier.icon} {nextTier.tier.label}
-                </p>
-                <div className="mt-1.5 h-2 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-primary rounded-full transition-all"
-                    style={{ width: `${Math.min(100, (stats.totalTrips / nextTier.tier.minTrips) * 100)}%` }}
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {nextTier.needed} more trip{nextTier.needed !== 1 ? "s" : ""} to unlock {nextTier.tier.label}
-                </p>
-              </div>
+      {/* Loyalty Tier Progression */}
+      <Card className={cn("border overflow-hidden", tier.border)}>
+        <div className={cn("px-5 py-3 flex items-center justify-between gap-3", tier.bg, "border-b", tier.border)}>
+          <div className="flex items-center gap-2.5">
+            <span className="text-2xl">{tier.icon}</span>
+            <div>
+              <p className={cn("font-bold text-sm leading-none", tier.color)}>{tier.label}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {stats.totalTrips} trip{stats.totalTrips !== 1 ? "s" : ""} completed
+              </p>
             </div>
-            <Button size="sm" asChild>
-              <Link href="/map">Find Parking <ArrowRight className="h-3.5 w-3.5 ml-1" /></Link>
-            </Button>
-          </CardContent>
-        </Card>
-      )}
+          </div>
+          {nextTier ? (
+            <p className={cn("text-xs font-semibold", tier.color)}>
+              {nextTier.needed} trip{nextTier.needed !== 1 ? "s" : ""} to {nextTier.tier.icon} {nextTier.tier.label}
+            </p>
+          ) : (
+            <span className={cn("text-xs font-bold px-2.5 py-1 rounded-full border", tier.bg, tier.color, tier.border)}>
+              Max Tier Reached 🎉
+            </span>
+          )}
+        </div>
+
+        <CardContent className="p-5 space-y-5">
+          {/* Tier track */}
+          <div className="relative">
+            {/* Connecting line */}
+            <div className="absolute top-5 left-5 right-5 h-1 bg-muted rounded-full" style={{ zIndex: 0 }} />
+            <div
+              className="absolute top-5 left-5 h-1 bg-primary rounded-full transition-all duration-700"
+              style={{
+                zIndex: 1,
+                width: (() => {
+                  const tierIdx = TIERS.indexOf(tier);
+                  const fullPct = ((TIERS.length - 1 - tierIdx) / (TIERS.length - 1));
+                  if (!nextTier) return `calc(100% - 40px)`;
+                  const segW = 1 / (TIERS.length - 1);
+                  const fromLeft = (TIERS.length - 1 - tierIdx - 1) * segW;
+                  const withinSeg = nextTier
+                    ? 1 - (nextTier.needed / nextTier.tier.minTrips)
+                    : 1;
+                  return `${(fromLeft + segW * withinSeg) * 100}%`;
+                })(),
+              }}
+            />
+            <div className="relative flex justify-between" style={{ zIndex: 2 }}>
+              {[...TIERS].reverse().map((t, i) => {
+                const tierIdx = TIERS.indexOf(tier);
+                const reversedIdx = TIERS.length - 1 - TIERS.indexOf(t);
+                const isActive = t.label === tier.label;
+                const isUnlocked = TIERS.indexOf(t) >= TIERS.indexOf(tier);
+                return (
+                  <div key={t.label} className="flex flex-col items-center gap-1.5">
+                    <div className={cn(
+                      "w-10 h-10 rounded-full border-2 flex items-center justify-center text-lg transition-all",
+                      isActive
+                        ? cn("border-primary shadow-md scale-110", tier.bg)
+                        : isUnlocked
+                          ? "bg-muted/60 border-muted-foreground/20"
+                          : "bg-muted border-muted opacity-40"
+                    )}>
+                      {t.icon}
+                    </div>
+                    <p className={cn(
+                      "text-[10px] font-semibold leading-tight text-center",
+                      isActive ? tier.color : isUnlocked ? "text-foreground" : "text-muted-foreground/50"
+                    )}>
+                      {t.label.split(" ")[0]}
+                    </p>
+                    <p className={cn(
+                      "text-[9px] text-center leading-none",
+                      isUnlocked ? "text-muted-foreground" : "text-muted-foreground/40"
+                    )}>
+                      {t.minTrips === 0 ? "Start" : `${t.minTrips}+ trips`}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Progress bar to next tier */}
+          {nextTier && (
+            <div className="space-y-1.5">
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span className="font-medium">{stats.totalTrips} trips</span>
+                <span>{nextTier.tier.minTrips} trips needed</span>
+              </div>
+              <div className="h-2 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-primary rounded-full transition-all duration-700"
+                  style={{ width: `${Math.min(100, (stats.totalTrips / nextTier.tier.minTrips) * 100)}%` }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground text-right">
+                {nextTier.needed} more to unlock {nextTier.tier.icon} {nextTier.tier.label}
+              </p>
+            </div>
+          )}
+
+          {/* Perks grid */}
+          <div className="grid sm:grid-cols-2 gap-3">
+            {/* Current tier perks */}
+            <div className={cn("rounded-xl border p-3.5 space-y-2", tier.bg, tier.border)}>
+              <p className={cn("text-xs font-bold uppercase tracking-wide", tier.color)}>
+                {tier.icon} Your perks — {tier.label}
+              </p>
+              <ul className="space-y-1.5">
+                {(
+                  tier.label === "Elite Parker"   ? ["Priority waitlist access", "0.5% cashback on every booking", "Free cancellations (24hr notice)", "Exclusive surge-free windows", "Dedicated support line"] :
+                  tier.label === "Pro Parker"     ? ["Early access to new spots", "Skip-the-queue on waitlists", "10% off surge pricing", "Monthly earnings summary"] :
+                  tier.label === "Regular Parker" ? ["Saved spots sync across devices", "Booking reminders via SMS", "Rate spots after each visit"] :
+                                                    ["Standard booking flow", "Favourite any spot", "Join zone waitlists"]
+                ).map((perk) => (
+                  <li key={perk} className="flex items-start gap-2 text-xs">
+                    <CheckCircle2 className={cn("h-3.5 w-3.5 flex-shrink-0 mt-px", tier.color)} />
+                    <span className={tier.color}>{perk}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Next tier preview */}
+            {nextTier ? (
+              <div className="rounded-xl border border-dashed border-muted-foreground/25 p-3.5 space-y-2 bg-muted/20">
+                <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                  {nextTier.tier.icon} Unlock — {nextTier.tier.label}
+                </p>
+                <ul className="space-y-1.5">
+                  {(
+                    nextTier.tier.label === "Elite Parker"   ? ["Priority waitlist access", "0.5% cashback on all bookings", "Free cancellations (24hr notice)", "Exclusive surge-free windows", "Dedicated support line"] :
+                    nextTier.tier.label === "Pro Parker"     ? ["Early access to new spots", "Skip-the-queue on waitlists", "10% off surge pricing", "Monthly earnings summary"] :
+                    nextTier.tier.label === "Regular Parker" ? ["Saved spots sync across devices", "Booking reminders via SMS", "Rate spots after each visit"] :
+                                                               ["Standard booking flow", "Favourite any spot", "Join zone waitlists"]
+                  ).map((perk) => (
+                    <li key={perk} className="flex items-start gap-2 text-xs text-muted-foreground/70">
+                      <div className="h-3.5 w-3.5 flex-shrink-0 mt-px rounded-full border border-muted-foreground/30 flex items-center justify-center">
+                        <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30" />
+                      </div>
+                      {perk}
+                    </li>
+                  ))}
+                </ul>
+                <Button size="sm" className="w-full h-7 text-xs mt-1 gap-1" asChild>
+                  <Link href="/map">
+                    Park now to progress <ArrowRight className="h-3 w-3" />
+                  </Link>
+                </Button>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-primary/20 p-3.5 bg-primary/5 flex flex-col items-center justify-center gap-2 text-center">
+                <span className="text-3xl">💎</span>
+                <p className="text-sm font-bold text-primary">You've reached Elite!</p>
+                <p className="text-xs text-muted-foreground">All perks are unlocked. Thank you for being a top ParkEase commuter.</p>
+                <Button size="sm" className="mt-1 gap-1" asChild>
+                  <Link href="/map">Find Parking <ArrowRight className="h-3 w-3" /></Link>
+                </Button>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Quick Actions */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
