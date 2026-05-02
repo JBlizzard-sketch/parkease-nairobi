@@ -14,7 +14,7 @@ import {
 } from "recharts";
 import {
   Car, Clock, TrendingUp, Star, MapPin, Heart, Zap, ArrowRight,
-  CheckCircle2, ChevronRight, Shield, Wallet, BarChart2,
+  CheckCircle2, ChevronRight, Shield, Wallet, BarChart2, Calendar, History,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
@@ -64,6 +64,133 @@ function FavoriteSpotCard({ spotId }: { spotId: number }) {
       <p className="text-xs text-muted-foreground truncate mt-0.5">{spot.zone}</p>
       <p className="text-xs font-bold text-primary mt-1">KES {spot.pricePerHour}/hr</p>
     </button>
+  );
+}
+
+function ParkingHeatmap({ bookings }: { bookings: Array<{ date?: string | null }> }) {
+  const WEEKS = 13;
+  const DAYS = 7;
+
+  const countMap: Record<string, number> = {};
+  for (const b of bookings) {
+    if (b.date) countMap[b.date] = (countMap[b.date] ?? 0) + 1;
+  }
+
+  const today = new Date();
+  const startDate = new Date(today);
+  startDate.setDate(startDate.getDate() - (WEEKS * DAYS - 1));
+  const dow = startDate.getDay();
+  startDate.setDate(startDate.getDate() - dow);
+
+  const allCells: Array<{ date: string; count: number; inRange: boolean }> = [];
+  const cursor = new Date(startDate);
+  for (let i = 0; i < WEEKS * DAYS; i++) {
+    const dateStr = cursor.toISOString().split("T")[0];
+    allCells.push({ date: dateStr, count: countMap[dateStr] ?? 0, inRange: cursor <= today });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  const months: Array<{ label: string; weekIdx: number }> = [];
+  for (let w = 0; w < WEEKS; w++) {
+    const ws = new Date(startDate);
+    ws.setDate(ws.getDate() + w * 7);
+    if (w === 0 || ws.getDate() <= 7) {
+      months.push({ label: ws.toLocaleDateString("en-KE", { month: "short" }), weekIdx: w });
+    }
+  }
+
+  const weeks = Array.from({ length: WEEKS }, (_, w) => allCells.slice(w * DAYS, (w + 1) * DAYS));
+  const DAY_LABELS = ["", "Mon", "", "Wed", "", "Fri", ""];
+
+  const cellColor = (count: number, inRange: boolean) => {
+    if (!inRange) return "bg-transparent";
+    if (count === 0) return "bg-muted/70";
+    if (count === 1) return "bg-primary/30";
+    if (count === 2) return "bg-primary/55";
+    return "bg-primary";
+  };
+
+  const totalDays = Object.keys(countMap).length;
+  const streak = (() => {
+    let s = 0;
+    const d = new Date(today);
+    while (true) {
+      const k = d.toISOString().split("T")[0];
+      if (!countMap[k]) break;
+      s++;
+      d.setDate(d.getDate() - 1);
+    }
+    return s;
+  })();
+
+  return (
+    <Card className="border-border/60">
+      <CardHeader className="pb-2">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-primary" />Parking Activity
+            </CardTitle>
+            <p className="text-xs text-muted-foreground mt-0.5">Your parking days over the last 3 months</p>
+          </div>
+          <div className="flex gap-3 text-right flex-shrink-0">
+            <div>
+              <p className="text-lg font-bold text-primary leading-none">{totalDays}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">active days</p>
+            </div>
+            {streak > 1 && (
+              <div>
+                <p className="text-lg font-bold text-amber-500 leading-none">{streak}🔥</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">day streak</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="overflow-x-auto">
+          <div className="min-w-max">
+            <div className="flex ml-6 mb-0.5 gap-0.5">
+              {Array.from({ length: WEEKS }, (_, w) => {
+                const ml = months.find((m) => m.weekIdx === w);
+                return (
+                  <div key={w} className="w-3.5 text-[10px] text-muted-foreground/70 leading-none">
+                    {ml ? ml.label : ""}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex gap-0.5">
+              <div className="flex flex-col gap-0.5 mr-1">
+                {DAY_LABELS.map((label, i) => (
+                  <div key={i} className="h-3.5 w-5 text-[9px] text-muted-foreground/60 flex items-center justify-end pr-0.5 leading-none">
+                    {label}
+                  </div>
+                ))}
+              </div>
+              {weeks.map((week, wi) => (
+                <div key={wi} className="flex flex-col gap-0.5">
+                  {week.map((cell, di) => (
+                    <div
+                      key={di}
+                      className={`w-3.5 h-3.5 rounded-sm transition-colors ${cellColor(cell.count, cell.inRange)}`}
+                      title={cell.inRange ? `${cell.date}: ${cell.count} booking${cell.count !== 1 ? "s" : ""}` : ""}
+                    />
+                  ))}
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center gap-1.5 mt-2 justify-end">
+              <span className="text-[10px] text-muted-foreground/60">Less</span>
+              {(["bg-muted/70", "bg-primary/30", "bg-primary/55", "bg-primary"] as const).map((cls, i) => (
+                <div key={i} className={`w-3.5 h-3.5 rounded-sm ${cls}`} />
+              ))}
+              <span className="text-[10px] text-muted-foreground/60">More</span>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -143,6 +270,18 @@ export default function CommuterDashboard() {
       .sort(([, a], [, b]) => b - a)
       .slice(0, 6)
       .map(([zone, count]) => ({ zone, count }));
+  }, [completed]);
+
+  const frequentSpots = useMemo(() => {
+    const map: Record<number, { spotId: number; spotTitle: string; spotAddress: string | null; count: number }> = {};
+    for (const b of completed) {
+      if (!b.spotId) continue;
+      if (!map[b.spotId]) {
+        map[b.spotId] = { spotId: b.spotId, spotTitle: b.spotTitle ?? "Parking Spot", spotAddress: b.spotAddress ?? null, count: 0 };
+      }
+      map[b.spotId].count++;
+    }
+    return Object.values(map).sort((a, b) => b.count - a.count).slice(0, 5);
   }, [completed]);
 
   const tier = getTier(stats.totalTrips);
@@ -375,6 +514,47 @@ export default function CommuterDashboard() {
         </Card>
       </div>
 
+      {/* Your Regulars — Book Again */}
+      {frequentSpots.length > 0 && (
+        <Card className="border-border/60">
+          <CardHeader className="pb-3 flex flex-row items-center justify-between">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <History className="h-4 w-4 text-primary" />Your Regulars
+            </CardTitle>
+            <span className="text-xs text-muted-foreground">Spots you visit most</span>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
+              {frequentSpots.map(({ spotId, spotTitle, spotAddress, count }) => (
+                <div
+                  key={spotId}
+                  className="flex-shrink-0 w-52 bg-muted/30 border border-border rounded-xl p-3.5 space-y-2.5 hover:border-primary/40 transition-colors"
+                >
+                  <div>
+                    <p className="font-semibold text-sm leading-tight line-clamp-2">{spotTitle}</p>
+                    {spotAddress && (
+                      <p className="text-xs text-muted-foreground flex items-center gap-0.5 mt-1 truncate">
+                        <MapPin className="h-3 w-3 flex-shrink-0" />{spotAddress}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-semibold flex-shrink-0">
+                      {count}× booked
+                    </span>
+                    <Button size="sm" className="h-7 text-xs px-2.5 gap-1 flex-shrink-0" asChild>
+                      <Link href={`/spots/${spotId}`}>
+                        Book again <ArrowRight className="h-3 w-3" />
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Bottom Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Recent Bookings */}
@@ -451,6 +631,9 @@ export default function CommuterDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Parking Activity Heatmap */}
+      <ParkingHeatmap bookings={completed} />
 
       {/* Loyalty progress */}
       {nextTier && (
