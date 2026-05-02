@@ -18,7 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   CheckCircle2, Clock, MapPin, Smartphone, Lock, Star, ArrowLeft,
   Copy, Share2, Loader2, AlertCircle, Receipt, Car, XCircle,
-  Navigation, CalendarPlus, MessageCircle,
+  Navigation, CalendarPlus, MessageCircle, Printer,
 } from "lucide-react";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
@@ -313,6 +313,69 @@ export default function BookingConfirmation() {
     a.click();
     URL.revokeObjectURL(url);
     toast({ title: "Calendar file downloaded", description: "Open it to add to your calendar app." });
+  };
+
+  const handlePrintReceipt = () => {
+    if (!booking) return;
+    const win = window.open("", "_blank", "width=520,height=760");
+    if (!win) return;
+    const fmtDate = (d: string) =>
+      new Date(d + "T12:00:00").toLocaleDateString("en-KE", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>ParkEase Receipt · Booking #${bookingId}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f8fafc;color:#111;padding:32px 24px}
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;max-width:420px;margin:0 auto}
+.header{background:#00A957;color:#fff;padding:20px 24px;display:flex;align-items:center;gap:14px}
+.logo{background:rgba(255,255,255,0.2);width:40px;height:40px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px}
+.brand{font-size:1.2rem;font-weight:700;letter-spacing:-0.01em}
+.brand span{opacity:.75;font-size:.8rem;display:block;font-weight:400;margin-top:1px}
+.ticket{padding:24px}
+.divider{border:none;border-top:1.5px dashed #e2e8f0;margin:16px 0;position:relative}
+.divider::before,.divider::after{content:'';position:absolute;top:50%;transform:translateY(-50%);width:16px;height:16px;border-radius:50%;background:#f8fafc;border:1px solid #e2e8f0}
+.divider::before{left:-32px}.divider::after{right:-32px}
+.spot{font-size:1.1rem;font-weight:700;margin-bottom:4px}
+.address{color:#64748b;font-size:.85rem;margin-bottom:16px}
+.row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:.875rem;border-bottom:1px solid #f1f5f9}
+.row:last-child{border-bottom:none}
+.row .label{color:#64748b}
+.row .value{font-weight:600}
+.total{display:flex;justify-content:space-between;align-items:center;margin-top:16px;padding-top:12px;border-top:2px solid #00A957;font-size:1.05rem;font-weight:700}
+.total .amount{color:#00A957;font-size:1.2rem}
+.badge{display:inline-flex;align-items:center;gap:4px;background:#dcfce7;color:#166534;padding:3px 10px;border-radius:999px;font-size:.75rem;font-weight:700;margin-bottom:16px}
+.mpesa{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 14px;margin-top:12px;font-size:.8rem;color:#166534}
+.mpesa strong{display:block;font-size:.9rem;letter-spacing:.05em}
+.footer{text-align:center;color:#94a3b8;font-size:.72rem;padding:16px 24px;border-top:1px solid #f1f5f9}
+.print-btn{display:block;margin:16px auto 0;padding:8px 24px;background:#00A957;color:#fff;border:none;border-radius:8px;font-size:.875rem;font-weight:600;cursor:pointer}
+@media print{.print-btn{display:none}}
+</style></head><body>
+<div class="card">
+  <div class="header">
+    <div class="logo">P</div>
+    <div class="brand">ParkEase Nairobi<span>Official Booking Receipt</span></div>
+  </div>
+  <div class="ticket">
+    <div class="badge">✓ ${booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}</div>
+    <div class="spot">${booking.spotTitle}</div>
+    <div class="address">📍 ${booking.spotAddress}</div>
+    <hr class="divider"/>
+    <div class="row"><span class="label">Booking ID</span><span class="value">#${bookingId}</span></div>
+    <div class="row"><span class="label">Date</span><span class="value">${fmtDate(booking.date)}</span></div>
+    <div class="row"><span class="label">Time</span><span class="value">${fmtHour(booking.startHour)} – ${fmtHour(booking.endHour)}</span></div>
+    <div class="row"><span class="label">Duration</span><span class="value">${booking.totalHours} hour${booking.totalHours > 1 ? "s" : ""}</span></div>
+    <div class="row"><span class="label">Rate</span><span class="value">KES ${booking.pricePerHour}/hr${booking.surgeMultiplier > 1 ? ` × ${booking.surgeMultiplier} surge` : ""}</span></div>
+    <div class="row"><span class="label">Guest</span><span class="value">${booking.commuterName}</span></div>
+    ${booking.mpesaCode ? `<div class="mpesa">Mpesa Payment<strong>${booking.mpesaCode}</strong></div>` : ""}
+    <div class="total"><span>Total Paid</span><span class="amount">KES ${booking.totalAmount.toLocaleString()}</span></div>
+  </div>
+  <div class="footer">ParkEase Nairobi · Generated ${new Date().toLocaleString("en-KE")} · This is an official receipt</div>
+</div>
+<button class="print-btn" onclick="window.print()">🖨️ Print Receipt</button>
+<script>setTimeout(()=>window.print(),300)</script>
+</body></html>`);
+    win.document.close();
+    win.focus();
   };
 
   if (isLoading) {
@@ -690,6 +753,17 @@ export default function BookingConfirmation() {
           <Lock className="h-4 w-4 flex-shrink-0" />
           Access instructions will be unlocked once payment is confirmed
         </div>
+      )}
+
+      {/* ── PRINT RECEIPT ── */}
+      {(isConfirmed || isCompleted) && (
+        <button
+          onClick={handlePrintReceipt}
+          className="w-full flex items-center justify-center gap-2 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <Printer className="h-3.5 w-3.5" />
+          Print / Save Receipt
+        </button>
       )}
 
       {/* ── CANCEL BOOKING ── */}

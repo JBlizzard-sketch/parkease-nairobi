@@ -4,7 +4,7 @@ import { DemoSwitcher } from "@/components/demo-switcher";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useGetMe, getGetMeQueryKey, useListBookings } from "@workspace/api-client-react";
-import { LogOut, Menu, X, User, LayoutDashboard, Car, Bell, MapPin, TrendingUp, Clock, Shield, Navigation } from "lucide-react";
+import { LogOut, Menu, X, User, LayoutDashboard, Car, Bell, MapPin, TrendingUp, Clock, Shield, Navigation, Home } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
@@ -389,9 +389,47 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
         </div>
       )}
 
-      <main className="flex-1 flex flex-col">
+      <main className="flex-1 flex flex-col pb-16 md:pb-0">
         {children}
       </main>
+
+      {/* Mobile Bottom Navigation */}
+      {isAuthenticated && (
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur border-t border-border flex items-stretch h-16">
+          {([
+            { href: "/",          icon: <Home className="h-5 w-5" />,            label: "Home",     active: location === "/" },
+            { href: "/map",       icon: <MapPin className="h-5 w-5" />,          label: "Map",      active: location.startsWith("/map") || location.startsWith("/spots") },
+            { href: "/bookings",  icon: <Car className="h-5 w-5" />,             label: "Bookings", active: location.startsWith("/bookings"), badge: commuterPendingCount },
+            { href: isOwner ? "/owner/dashboard" : "/profile",
+              icon: isOwner ? <LayoutDashboard className="h-5 w-5" /> : <User className="h-5 w-5" />,
+              label: isOwner ? "Owner" : "Profile",
+              active: isOwner ? location.startsWith("/owner") : location === "/profile" },
+          ] as Array<{ href: string; icon: React.ReactNode; label: string; active: boolean; badge?: number }>).map(({ href, icon, label, active, badge }) => (
+            <Link
+              key={href}
+              href={href}
+              className={cn(
+                "flex-1 flex flex-col items-center justify-center gap-0.5 relative transition-colors pt-1",
+                active ? "text-primary" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {active && (
+                <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-primary rounded-full" />
+              )}
+              <div className="relative">
+                {icon}
+                {badge && badge > 0 ? (
+                  <span className="absolute -top-1 -right-1.5 bg-amber-500 text-white text-[9px] font-bold rounded-full min-w-[14px] h-3.5 flex items-center justify-center px-0.5 leading-none">
+                    {badge > 9 ? "9+" : badge}
+                  </span>
+                ) : null}
+              </div>
+              <span className={cn("text-[10px] font-medium", active ? "text-primary" : "")}>{label}</span>
+            </Link>
+          ))}
+        </nav>
+      )}
+
       <DemoSwitcher />
     </div>
   );
