@@ -191,7 +191,7 @@ export const GetMapSpotsQueryParams = zod.object({
   lat: zod.coerce.number(),
   lng: zod.coerce.number(),
   radiusKm: zod.coerce.number().default(getMapSpotsQueryRadiusKmDefault),
-  date: zod.date().optional(),
+  date: zod.string().optional(),
   startHour: zod.coerce.number().optional(),
   endHour: zod.coerce.number().optional(),
 });
@@ -702,7 +702,7 @@ export const GetZoneSummaryResponse = zod.object({
  */
 export const GetSurgePricingQueryParams = zod.object({
   zone: zod.coerce.string(),
-  date: zod.date(),
+  date: zod.string(),
 });
 
 export const GetSurgePricingResponse = zod.object({
