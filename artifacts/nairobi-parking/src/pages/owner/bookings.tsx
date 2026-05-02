@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useListBookings, useUpdateBookingStatus, useCreateReview, getListBookingsQueryKey } from "@workspace/api-client-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useQueryClient } from "@tanstack/react-query";
@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
-import { Calendar, Clock, User, Check, X, DollarSign, CheckCircle2, TrendingUp, Loader2, MessageSquare, Star, UserX } from "lucide-react";
+import { Calendar, Clock, User, Check, X, DollarSign, CheckCircle2, TrendingUp, Loader2, MessageSquare, Star, UserX, ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -21,7 +21,17 @@ const STATUS_COLORS: Record<string, string> = {
 
 const fmtHour = (h: number) => `${h % 12 || 12}${h < 12 ? "am" : "pm"}`;
 
-type Status = "all" | "pending" | "confirmed" | "completed" | "cancelled";
+type Status = "all" | "pending" | "confirmed" | "completed" | "cancelled" | "calendar";
+
+const STATUS_DOT: Record<string, string> = {
+  pending: "bg-amber-400",
+  confirmed: "bg-emerald-500",
+  completed: "bg-blue-500",
+  cancelled: "bg-red-400",
+  no_show: "bg-gray-400",
+};
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export default function OwnerBookings() {
   const { userId } = useCurrentUser();
@@ -33,6 +43,10 @@ export default function OwnerBookings() {
   const [ratingValue, setRatingValue] = useState(5);
   const [ratingComment, setRatingComment] = useState("");
   const [ratedBookings, setRatedBookings] = useState<Set<number>>(new Set());
+  const [calMonth, setCalMonth] = useState(() => {
+    const d = new Date(); return { year: d.getFullYear(), month: d.getMonth() };
+  });
+  const [calDay, setCalDay] = useState<string | null>(null);
 
   const qk = () =>
     getListBookingsQueryKey({ userId: userId ?? undefined, role: "owner", limit: 100 });
@@ -89,6 +103,34 @@ export default function OwnerBookings() {
   if (!userId) return <div className="p-8 text-center text-muted-foreground">Please log in as an owner.</div>;
 
   const bookings = allData?.bookings ?? [];
+
+  const bookingsByDate = useMemo(() => {
+    const map: Record<string, typeof bookings> = {};
+    for (const b of bookings) {
+      if (!map[b.date]) map[b.date] = [];
+      map[b.date].push(b);
+    }
+    return map;
+  }, [bookings]);
+
+  const { calFirstDay, calDaysInMonth } = useMemo(() => {
+    const { year, month } = calMonth;
+    return {
+      calFirstDay: new Date(year, month, 1).getDay(),
+      calDaysInMonth: new Date(year, month + 1, 0).getDate(),
+    };
+  }, [calMonth]);
+
+  const todayStr = new Date().toISOString().split("T")[0];
+  const calMonthLabel = new Date(calMonth.year, calMonth.month, 1)
+    .toLocaleString("en", { month: "long", year: "numeric" });
+
+  const prevMonth = () => setCalMonth(({ year, month }) =>
+    month === 0 ? { year: year - 1, month: 11 } : { year, month: month - 1 }
+  );
+  const nextMonth = () => setCalMonth(({ year, month }) =>
+    month === 11 ? { year: year + 1, month: 0 } : { year, month: month + 1 }
+  );
   const pending = bookings.filter((b) => b.status === "pending");
   const confirmed = bookings.filter((b) => b.status === "confirmed");
   const completed = bookings.filter((b) => b.status === "completed");
@@ -344,9 +386,9 @@ export default function OwnerBookings() {
         </div>
       )}
 
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as Status)}>
-        <TabsList className="w-full grid grid-cols-5">
-          {(["pending", "confirmed", "completed", "cancelled", "all"] as Status[]).map((s) => {
+      <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v as Status); setCalDay(null); }}>
+        <TabsList className="w-full grid grid-cols-6">
+          {(["pending", "confirmed", "completed", "cancelled", "all"] as Exclude<Status, "calendar">[]).map((s) => {
             const count = s === "all" ? bookings.length : s === "pending" ? pending.length : s === "confirmed" ? confirmed.length : s === "completed" ? completed.length : cancelled.length;
             return (
               <TabsTrigger key={s} value={s} className="capitalize text-xs sm:text-sm gap-1">
@@ -361,23 +403,187 @@ export default function OwnerBookings() {
               </TabsTrigger>
             );
           })}
+          <TabsTrigger value="calendar" className="gap-1 text-xs sm:text-sm">
+            <CalendarDays className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Cal</span>
+          </TabsTrigger>
         </TabsList>
 
-        <TabsContent value={activeTab} className="mt-4">
+        {(["pending", "confirmed", "completed", "cancelled", "all"] as Exclude<Status, "calendar">[]).map((s) => (
+          <TabsContent key={s} value={s} className="mt-4">
+            {isLoading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => <div key={i} className="h-28 bg-muted animate-pulse rounded-xl" />)}
+              </div>
+            ) : (() => {
+              const list = s === "all" ? bookings : s === "pending" ? pending : s === "confirmed" ? confirmed : s === "completed" ? completed : cancelled;
+              return list.length === 0 ? (
+                <div className="text-center py-20 text-muted-foreground">
+                  <Calendar className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                  <p className="text-lg font-medium">No {s === "all" ? "" : s} bookings</p>
+                  {s === "pending" && <p className="text-sm mt-1">New requests will appear here for you to accept or decline</p>}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {list.map((b) => <BookingCard key={b.id} booking={b} />)}
+                </div>
+              );
+            })()}
+          </TabsContent>
+        ))}
+
+        {/* Calendar view */}
+        <TabsContent value="calendar" className="mt-4 space-y-4">
           {isLoading ? (
-            <div className="space-y-3">
-              {[1, 2, 3].map((i) => <div key={i} className="h-28 bg-muted animate-pulse rounded-xl" />)}
-            </div>
-          ) : list.length === 0 ? (
-            <div className="text-center py-20 text-muted-foreground">
-              <Calendar className="h-12 w-12 mx-auto mb-4 opacity-30" />
-              <p className="text-lg font-medium">No {activeTab === "all" ? "" : activeTab} bookings</p>
-              {activeTab === "pending" && <p className="text-sm mt-1">New requests will appear here for you to accept or decline</p>}
-            </div>
+            <div className="h-64 bg-muted animate-pulse rounded-xl" />
           ) : (
-            <div className="space-y-3">
-              {list.map((b) => <BookingCard key={b.id} booking={b} />)}
-            </div>
+            <>
+              <Card className="border-border/60">
+                <CardContent className="p-4">
+                  {/* Month nav */}
+                  <div className="flex items-center justify-between mb-4">
+                    <button onClick={prevMonth} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    <h2 className="font-bold text-base">{calMonthLabel}</h2>
+                    <button onClick={nextMonth} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  {/* Legend */}
+                  <div className="flex flex-wrap gap-3 mb-3">
+                    {(["pending", "confirmed", "completed", "cancelled", "no_show"] as const).map((s) => (
+                      <span key={s} className="flex items-center gap-1.5 text-[10px] text-muted-foreground capitalize">
+                        <span className={cn("w-2 h-2 rounded-full flex-shrink-0", STATUS_DOT[s])} />
+                        {s.replace("_", " ")}
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* Weekday headers */}
+                  <div className="grid grid-cols-7 gap-px mb-1">
+                    {WEEKDAYS.map((d) => (
+                      <div key={d} className="text-center text-[10px] font-semibold text-muted-foreground py-1">{d}</div>
+                    ))}
+                  </div>
+
+                  {/* Day grid */}
+                  <div className="grid grid-cols-7 gap-px">
+                    {Array.from({ length: calFirstDay }).map((_, i) => (
+                      <div key={`empty-${i}`} className="aspect-square" />
+                    ))}
+                    {Array.from({ length: calDaysInMonth }).map((_, i) => {
+                      const day = i + 1;
+                      const dateStr = `${calMonth.year}-${String(calMonth.month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                      const dayBookings = bookingsByDate[dateStr] ?? [];
+                      const isToday = dateStr === todayStr;
+                      const isSelected = calDay === dateStr;
+                      const visible = dayBookings.slice(0, 3);
+                      const extra = dayBookings.length - 3;
+
+                      return (
+                        <button
+                          key={day}
+                          onClick={() => setCalDay(isSelected ? null : dateStr)}
+                          className={cn(
+                            "aspect-square rounded-lg border flex flex-col items-center justify-start pt-1 px-0.5 transition-all hover:border-primary/40 hover:bg-muted/40 text-xs leading-none",
+                            isToday && !isSelected && "border-primary/50 bg-primary/5 font-bold",
+                            isSelected ? "border-primary bg-primary/10 font-bold" : "border-transparent",
+                            dayBookings.length > 0 ? "cursor-pointer" : "cursor-default opacity-60"
+                          )}
+                        >
+                          <span className={cn("text-[11px]", isToday ? "text-primary font-bold" : "")}>{day}</span>
+                          {dayBookings.length > 0 && (
+                            <div className="flex flex-wrap gap-px justify-center mt-1">
+                              {visible.map((b, bi) => (
+                                <span key={bi} className={cn("w-1.5 h-1.5 rounded-full", STATUS_DOT[b.status] ?? "bg-gray-300")} />
+                              ))}
+                              {extra > 0 && (
+                                <span className="text-[8px] text-muted-foreground leading-none mt-px">+{extra}</span>
+                              )}
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Day detail panel */}
+              {calDay && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-sm flex items-center gap-2">
+                      <CalendarDays className="h-4 w-4 text-primary" />
+                      {new Date(calDay + "T12:00:00").toLocaleDateString("en", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+                      <span className="text-muted-foreground font-normal">·</span>
+                      <span className="text-muted-foreground font-normal">{(bookingsByDate[calDay] ?? []).length} booking{(bookingsByDate[calDay] ?? []).length !== 1 ? "s" : ""}</span>
+                    </h3>
+                    <button onClick={() => setCalDay(null)} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+                      ✕ Close
+                    </button>
+                  </div>
+
+                  {/* Revenue for day */}
+                  {(bookingsByDate[calDay] ?? []).length > 0 && (
+                    <div className="flex gap-3 flex-wrap">
+                      {(["pending", "confirmed", "completed"] as const).map((s) => {
+                        const items = (bookingsByDate[calDay] ?? []).filter((b) => b.status === s);
+                        if (items.length === 0) return null;
+                        const rev = items.reduce((sum, b) => sum + b.ownerEarning, 0);
+                        return (
+                          <div key={s} className={cn("px-3 py-1.5 rounded-lg text-xs border", STATUS_COLORS[s])}>
+                            <span className="font-bold">{items.length} {s}</span>
+                            <span className="ml-1.5 opacity-80">· KES {rev.toLocaleString()} net</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <div className="space-y-3">
+                    {(bookingsByDate[calDay] ?? []).map((b) => <BookingCard key={b.id} booking={b} />)}
+                  </div>
+                </div>
+              )}
+
+              {/* Month summary */}
+              {bookings.length > 0 && !calDay && (
+                <Card className="border-border/60 bg-muted/20">
+                  <CardContent className="p-4">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                      {calMonthLabel} — Overview
+                    </p>
+                    {(() => {
+                      const monthPrefix = `${calMonth.year}-${String(calMonth.month + 1).padStart(2, "0")}`;
+                      const monthBookings = bookings.filter((b) => b.date.startsWith(monthPrefix));
+                      const monthEarnings = monthBookings
+                        .filter((b) => b.status === "completed")
+                        .reduce((s, b) => s + b.ownerEarning, 0);
+                      const activeDays = new Set(monthBookings.map((b) => b.date)).size;
+                      return (
+                        <div className="grid grid-cols-3 gap-3 text-center">
+                          <div>
+                            <p className="text-lg font-bold">{monthBookings.length}</p>
+                            <p className="text-[10px] text-muted-foreground">Total bookings</p>
+                          </div>
+                          <div>
+                            <p className="text-lg font-bold text-primary">KES {monthEarnings.toLocaleString()}</p>
+                            <p className="text-[10px] text-muted-foreground">Net earned</p>
+                          </div>
+                          <div>
+                            <p className="text-lg font-bold">{activeDays}</p>
+                            <p className="text-[10px] text-muted-foreground">Active days</p>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </CardContent>
+                </Card>
+              )}
+            </>
           )}
         </TabsContent>
       </Tabs>
