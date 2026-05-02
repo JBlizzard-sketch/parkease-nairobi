@@ -24,6 +24,7 @@ import OwnerEditSpot from "@/pages/owner/edit-spot";
 import OwnerBookings from "@/pages/owner/bookings";
 import OwnerPayouts from "@/pages/owner/payouts";
 import SavedSpots from "@/pages/saved-spots";
+import OwnerProfile from "@/pages/owner-profile";
 
 const queryClient = new QueryClient();
 
@@ -43,6 +44,7 @@ function Router() {
         <Route path="/dashboard" component={CommuterDashboard} />
         <Route path="/admin" component={AdminAnalytics} />
         <Route path="/saved" component={SavedSpots} />
+        <Route path="/owner-profile/:ownerId" component={OwnerProfile} />
 
         <Route path="/owner/dashboard" component={OwnerDashboard} />
         <Route path="/owner/spots" component={OwnerSpots} />

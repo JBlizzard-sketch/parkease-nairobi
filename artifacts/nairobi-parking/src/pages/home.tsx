@@ -51,6 +51,7 @@ export default function Home() {
   const { data: zoneSummary, isLoading } = useGetZoneSummary();
   const { data: mapData } = useGetMapSpots({ lat: -1.2921, lng: 36.8219, radiusKm: 20 });
   const [searchQuery, setSearchQuery] = useState("");
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [, setLocation] = useLocation();
   const { isFavorite, toggle: toggleFavorite } = useFavorites();
   const { userId } = useCurrentUser();
@@ -109,8 +110,37 @@ export default function Home() {
     { value: `KES ${avgPrice}`, label: "Avg Hourly Rate", icon: <TrendingUp className="h-4 w-4" /> },
   ];
 
+  const suggestions = useMemo(() => {
+    if (!searchQuery.trim() || searchQuery.length < 2) return [];
+    const q = searchQuery.toLowerCase();
+    const results: Array<{ type: "zone" | "spot"; label: string; sub: string; href: string }> = [];
+    for (const zone of (zoneSummary?.zones ?? [])) {
+      if (zone.zone.toLowerCase().includes(q)) {
+        results.push({
+          type: "zone",
+          label: zone.zone,
+          sub: `${zone.availableSpots} available · KES ${zone.avgPricePerHour}/hr avg`,
+          href: `/map?zone=${encodeURIComponent(zone.zone)}`,
+        });
+      }
+    }
+    for (const spot of (mapData?.spots ?? [])) {
+      if (results.length >= 6) break;
+      if (spot.title.toLowerCase().includes(q) || spot.zone.toLowerCase().includes(q)) {
+        results.push({
+          type: "spot",
+          label: spot.title,
+          sub: `${spot.zone} · KES ${spot.pricePerHour}/hr`,
+          href: `/spots/${spot.id}`,
+        });
+      }
+    }
+    return results.slice(0, 6);
+  }, [searchQuery, zoneSummary, mapData]);
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
+    setShowSuggestions(false);
     const trimmed = searchQuery.trim();
     setLocation(trimmed ? `/map?zone=${encodeURIComponent(trimmed)}` : "/map");
   };
@@ -143,19 +173,49 @@ export default function Home() {
             Unlock private driveways, church compounds, and secure office basements across the city. Book your spot in seconds.
           </p>
 
-          <form onSubmit={handleSearch} className="max-w-2xl mx-auto mt-6 relative flex items-center shadow-2xl">
-            <MapPin className="absolute left-4 text-muted-foreground h-5 w-5 z-10" />
-            <Input
-              type="text"
-              placeholder="Where do you want to park? (e.g. Westlands, CBD...)"
-              className="pl-12 pr-36 h-14 text-base bg-card text-card-foreground rounded-full border-0 focus-visible:ring-secondary focus-visible:ring-2"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-            <Button type="submit" size="lg" className="absolute right-2 rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/90 h-10 px-6 font-bold">
-              <Search className="h-4 w-4 mr-1.5" /> Search
-            </Button>
-          </form>
+          <div className="max-w-2xl mx-auto mt-6 relative">
+            <form onSubmit={handleSearch} className="relative flex items-center shadow-2xl">
+              <MapPin className="absolute left-4 text-muted-foreground h-5 w-5 z-10" />
+              <Input
+                type="text"
+                placeholder="Where do you want to park? (e.g. Westlands, CBD...)"
+                className="pl-12 pr-36 h-14 text-base bg-card text-card-foreground rounded-full border-0 focus-visible:ring-secondary focus-visible:ring-2"
+                value={searchQuery}
+                onChange={(e) => { setSearchQuery(e.target.value); setShowSuggestions(true); }}
+                onFocus={() => setShowSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                autoComplete="off"
+              />
+              <Button type="submit" size="lg" className="absolute right-2 rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/90 h-10 px-6 font-bold">
+                <Search className="h-4 w-4 mr-1.5" /> Search
+              </Button>
+            </form>
+
+            {/* Autocomplete dropdown */}
+            {showSuggestions && suggestions.length > 0 && (
+              <div className="absolute top-full left-0 right-0 mt-2 bg-card border border-border rounded-2xl shadow-2xl overflow-hidden z-50">
+                {suggestions.map((s, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/60 text-left border-b border-border last:border-0 transition-colors"
+                    onMouseDown={() => { setLocation(s.href); setShowSuggestions(false); setSearchQuery(""); }}
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      {s.type === "zone"
+                        ? <MapPin className="h-3.5 w-3.5 text-primary" />
+                        : <Car className="h-3.5 w-3.5 text-primary" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground">{s.label}</p>
+                      <p className="text-xs text-muted-foreground truncate">{s.sub}</p>
+                    </div>
+                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           <div className="flex flex-wrap justify-center gap-2 mt-2 text-sm">
             {["Westlands", "CBD", "Kilimani", "Karen", "Parklands", "Upperhill"].map((z) => (

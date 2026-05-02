@@ -551,29 +551,32 @@ export default function SpotDetail() {
           </Card>
 
           {/* Owner */}
-          <Card>
-            <CardContent className="p-4 flex items-center gap-3">
-              <div className={`w-11 h-11 rounded-full bg-gradient-to-br ${ownerAvatarGrad} flex items-center justify-center font-bold text-white text-lg flex-shrink-0`}>
-                {ownerInitial}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold">{spot.ownerName}</p>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  <Phone className="h-3 w-3 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">{spot.ownerPhone}</p>
+          <Link href={`/owner-profile/${spot.ownerId}`}>
+            <Card className="hover:border-primary/40 hover:shadow-sm transition-all cursor-pointer">
+              <CardContent className="p-4 flex items-center gap-3">
+                <div className={`w-11 h-11 rounded-full bg-gradient-to-br ${ownerAvatarGrad} flex items-center justify-center font-bold text-white text-lg flex-shrink-0`}>
+                  {ownerInitial}
                 </div>
-              </div>
-              {spot.rating && (
-                <div className="flex flex-col items-end flex-shrink-0">
-                  <div className="flex items-center gap-1">
-                    <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
-                    <span className="font-bold">{spot.rating.toFixed(1)}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold">{spot.ownerName}</p>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <Phone className="h-3 w-3 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">{spot.ownerPhone}</p>
                   </div>
-                  <span className="text-xs text-muted-foreground">{spot.reviewCount} reviews</span>
+                  <p className="text-xs text-primary mt-1">View all listings →</p>
                 </div>
-              )}
-            </CardContent>
-          </Card>
+                {spot.rating && (
+                  <div className="flex flex-col items-end flex-shrink-0">
+                    <div className="flex items-center gap-1">
+                      <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+                      <span className="font-bold">{spot.rating.toFixed(1)}</span>
+                    </div>
+                    <span className="text-xs text-muted-foreground">{spot.reviewCount} reviews</span>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </Link>
 
           {/* Peak Hours heatmap */}
           <PeakHoursWidget
