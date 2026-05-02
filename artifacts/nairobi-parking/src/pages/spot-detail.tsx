@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useParams, useLocation } from "wouter";
 import { useGetSpot, useGetSurgePricing, useCreateBooking, useListReviews, getGetSpotQueryKey, getGetSurgePricingQueryKey } from "@workspace/api-client-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { useFavorites } from "@/hooks/use-favorites";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { MapPin, Shield, Clock, Star, Car, Zap, ArrowLeft, CalendarDays, Lock } from "lucide-react";
+import { MapPin, Shield, Clock, Star, Car, Zap, ArrowLeft, CalendarDays, Lock, Heart, ChevronLeft, ChevronRight, Images } from "lucide-react";
 import { Link } from "wouter";
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -23,11 +24,13 @@ export default function SpotDetail() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { isFavorite, toggle: toggleFavorite } = useFavorites();
 
   const today = new Date().toISOString().split("T")[0];
   const [date, setDate] = useState(today);
   const [startHour, setStartHour] = useState(8);
   const [endHour, setEndHour] = useState(17);
+  const [photoIdx, setPhotoIdx] = useState(0);
 
   const { data: spot, isLoading } = useGetSpot(id, {
     query: { enabled: !!id, queryKey: getGetSpotQueryKey(id) },
@@ -48,7 +51,10 @@ export default function SpotDetail() {
         toast({ title: "Booking created!", description: "Proceed to pay via Mpesa." });
         setLocation(`/book/${booking.id}`);
       },
-      onError: () => toast({ title: "Booking failed", description: "This slot may already be taken.", variant: "destructive" }),
+      onError: (err: any) => {
+        const msg = err?.response?.data?.error ?? "This slot may already be taken.";
+        toast({ title: "Booking failed", description: msg, variant: "destructive" });
+      },
     },
   });
 
@@ -81,6 +87,10 @@ export default function SpotDetail() {
     });
   };
 
+  const photos = (spot?.photos as string[] | undefined) ?? [];
+  const prevPhoto = () => setPhotoIdx((i) => (i - 1 + photos.length) % photos.length);
+  const nextPhoto = () => setPhotoIdx((i) => (i + 1) % photos.length);
+
   if (isLoading) {
     return (
       <div className="container mx-auto p-4 max-w-4xl py-8 space-y-4">
@@ -106,12 +116,70 @@ export default function SpotDetail() {
         <Link href="/map">
           <Button variant="ghost" size="icon"><ArrowLeft className="h-5 w-5" /></Button>
         </Link>
-        <nav className="text-sm text-muted-foreground">
+        <nav className="text-sm text-muted-foreground flex-1">
           <Link href="/map" className="hover:text-foreground">Map</Link>
           <span className="mx-2">/</span>
           <span className="text-foreground">{spot.title}</span>
         </nav>
+        <button
+          onClick={() => toggleFavorite(id)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border hover:border-red-300 transition-colors text-sm"
+          aria-label={isFavorite(id) ? "Remove from saved" : "Save spot"}
+        >
+          <Heart className={`h-4 w-4 transition-colors ${isFavorite(id) ? "fill-red-500 text-red-500" : "text-muted-foreground"}`} />
+          <span className={`hidden sm:inline font-medium ${isFavorite(id) ? "text-red-500" : "text-muted-foreground"}`}>
+            {isFavorite(id) ? "Saved" : "Save"}
+          </span>
+        </button>
       </div>
+
+      {/* Photo Carousel */}
+      {photos.length > 0 ? (
+        <div className="relative rounded-xl overflow-hidden h-56 sm:h-72 bg-muted group">
+          <img
+            src={photos[photoIdx]}
+            alt={`${spot.title} photo ${photoIdx + 1}`}
+            className="w-full h-full object-cover"
+            onError={(e) => { (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1590674899484-d5640e854abe?w=600"; }}
+          />
+          {photos.length > 1 && (
+            <>
+              <button
+                onClick={prevPhoto}
+                className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/60 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+              <button
+                onClick={nextPhoto}
+                className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/60 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <ChevronRight className="h-5 w-5" />
+              </button>
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
+                {photos.map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setPhotoIdx(i)}
+                    className={`w-1.5 h-1.5 rounded-full transition-all ${i === photoIdx ? "bg-white scale-125" : "bg-white/50 hover:bg-white/80"}`}
+                  />
+                ))}
+              </div>
+              <div className="absolute top-3 right-3 bg-black/40 text-white text-xs px-2 py-0.5 rounded-full flex items-center gap-1">
+                <Images className="h-3 w-3" />
+                {photoIdx + 1}/{photos.length}
+              </div>
+            </>
+          )}
+        </div>
+      ) : (
+        <div className="rounded-xl h-40 sm:h-56 bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center border border-primary/10">
+          <div className="text-center text-muted-foreground">
+            <MapPin className="h-10 w-10 mx-auto mb-2 opacity-40" />
+            <p className="text-sm">No photos yet</p>
+          </div>
+        </div>
+      )}
 
       <div className="grid md:grid-cols-5 gap-6">
         {/* Left: Spot Info */}
@@ -191,7 +259,7 @@ export default function SpotDetail() {
             </Card>
           )}
 
-          {/* Access Instructions (only shown if confirmed) */}
+          {/* Access Instructions */}
           <Card className="border-dashed border-muted-foreground/40">
             <CardContent className="p-4 flex items-start gap-3">
               <Lock className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-0.5" />

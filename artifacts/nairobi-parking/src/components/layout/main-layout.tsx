@@ -3,8 +3,8 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { useGetMe, getGetMeQueryKey } from "@workspace/api-client-react";
-import { LogOut, Menu, X, User, LayoutDashboard, Car, Clock } from "lucide-react";
+import { useGetMe, getGetMeQueryKey, useListBookings } from "@workspace/api-client-react";
+import { LogOut, Menu, X, User, LayoutDashboard, Car, Clock, Bell } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
@@ -17,6 +17,14 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
     { userId: userId ?? 0 },
     { query: { enabled: !!userId, queryKey: getGetMeQueryKey({ userId: userId ?? 0 }) } }
   );
+
+  const isOwner = role === "owner" || role === "both";
+
+  const { data: pendingBookingsData } = useListBookings(
+    { userId: userId ?? 0, role: "owner", status: "pending", limit: 50 },
+    { query: { enabled: !!userId && isOwner, queryKey: ["pending-bookings-bell", userId] } }
+  );
+  const pendingCount = pendingBookingsData?.total ?? 0;
 
   const navLink = (href: string, label: string) => (
     <Link
@@ -47,7 +55,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
             {navLink("/map", "Find Parking")}
             {navLink("/bookings", "My Bookings")}
             {navLink("/waitlist", "Waitlist")}
-            {(role === "owner" || role === "both") && (
+            {isOwner && (
               <Link
                 href="/owner/dashboard"
                 className={cn(
@@ -67,6 +75,26 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
             >
               Analytics
             </Link>
+
+            {/* Notification Bell (owners only) */}
+            {isAuthenticated && isOwner && (
+              <Link href="/owner/bookings" className="relative">
+                <button
+                  className={cn(
+                    "relative p-1.5 rounded-md transition-colors hover:bg-muted",
+                    location === "/owner/bookings" ? "text-primary" : "text-muted-foreground"
+                  )}
+                  title="Pending booking requests"
+                >
+                  <Bell className="h-5 w-5" />
+                  {pendingCount > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 bg-destructive text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-0.5 leading-none">
+                      {pendingCount > 9 ? "9+" : pendingCount}
+                    </span>
+                  )}
+                </button>
+              </Link>
+            )}
 
             {isAuthenticated && me ? (
               <DropdownMenu>
@@ -93,10 +121,19 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                       <Car className="h-4 w-4" /> My Bookings
                     </Link>
                   </DropdownMenuItem>
-                  {(role === "owner" || role === "both") && (
+                  {isOwner && (
                     <DropdownMenuItem asChild>
                       <Link href="/owner/dashboard" className="flex items-center gap-2 cursor-pointer">
                         <LayoutDashboard className="h-4 w-4" /> Owner Dashboard
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
+                  {isOwner && pendingCount > 0 && (
+                    <DropdownMenuItem asChild>
+                      <Link href="/owner/bookings" className="flex items-center gap-2 cursor-pointer">
+                        <Bell className="h-4 w-4 text-destructive" />
+                        <span>Requests</span>
+                        <span className="ml-auto bg-destructive text-white text-xs rounded-full px-1.5 py-0.5 leading-none">{pendingCount}</span>
                       </Link>
                     </DropdownMenuItem>
                   )}
@@ -116,15 +153,26 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
             )}
           </nav>
 
-          {/* Mobile Toggle */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="md:hidden"
-            onClick={() => setMobileMenuOpen((v) => !v)}
-          >
-            {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-          </Button>
+          {/* Mobile: Bell + Toggle */}
+          <div className="md:hidden flex items-center gap-1">
+            {isAuthenticated && isOwner && (
+              <Link href="/owner/bookings" className="relative p-2">
+                <Bell className="h-5 w-5 text-muted-foreground" />
+                {pendingCount > 0 && (
+                  <span className="absolute top-1 right-1 bg-destructive text-white text-[9px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center leading-none">
+                    {pendingCount > 9 ? "9+" : pendingCount}
+                  </span>
+                )}
+              </Link>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setMobileMenuOpen((v) => !v)}
+            >
+              {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </Button>
+          </div>
         </div>
 
         {/* Mobile Nav */}
@@ -149,11 +197,21 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
             {isAuthenticated && (
               <Link href="/profile" className="block text-sm font-medium py-1" onClick={() => setMobileMenuOpen(false)}>My Profile</Link>
             )}
-            {(role === "owner" || role === "both") && (
+            {isOwner && (
               <Link href="/owner/dashboard" className="block text-sm font-medium text-secondary py-1" onClick={() => setMobileMenuOpen(false)}>
                 Owner Dashboard
               </Link>
             )}
+            {isOwner && (
+              <Link href="/owner/bookings" className="flex items-center gap-2 text-sm font-medium py-1" onClick={() => setMobileMenuOpen(false)}>
+                <Bell className="h-4 w-4" />
+                Booking Requests
+                {pendingCount > 0 && (
+                  <span className="bg-destructive text-white text-xs rounded-full px-1.5 py-0.5 leading-none ml-1">{pendingCount}</span>
+                )}
+              </Link>
+            )}
+            <Link href="/admin" className="block text-sm font-medium py-1 text-muted-foreground" onClick={() => setMobileMenuOpen(false)}>Analytics</Link>
             {isAuthenticated ? (
               <Button
                 variant="ghost"

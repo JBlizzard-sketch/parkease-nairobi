@@ -1,12 +1,21 @@
+import { useState } from "react";
 import { useGetZoneSummary, useListBookings, useListSpots, getGetZoneSummaryQueryKey } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell } from "recharts";
-import { TrendingUp, Car, Users, Zap, MapPin, DollarSign, Activity } from "lucide-react";
+import { TrendingUp, Car, Users, Zap, MapPin, DollarSign, Activity, RefreshCw } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 const ZONE_COLORS = ["#00A957", "#f59e0b", "#3b82f6", "#ef4444", "#8b5cf6", "#06b6d4", "#f97316", "#84cc16"];
 
 export default function AdminAnalytics() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [surgeRunning, setSurgeRunning] = useState(false);
+  const [surgeResult, setSurgeResult] = useState<string | null>(null);
+
   const { data: zones, isLoading: zonesLoading } = useGetZoneSummary({
     query: { queryKey: getGetZoneSummaryQueryKey() }
   });
@@ -60,15 +69,52 @@ export default function AdminAnalytics() {
   const surgeZones = zones?.zones.filter((z) => z.surgeMultiplier > 1) ?? [];
   const highDemandZones = zones?.zones.filter((z) => z.waitlistCount > 0) ?? [];
 
+  const runSurgeEngine = async () => {
+    setSurgeRunning(true);
+    setSurgeResult(null);
+    try {
+      const res = await fetch("/api/analytics/trigger-surge", { method: "POST" });
+      const data = await res.json();
+      setSurgeResult(data.message);
+      toast({ title: "Surge Engine Run", description: data.message });
+      queryClient.invalidateQueries({ queryKey: getGetZoneSummaryQueryKey() });
+    } catch {
+      toast({ title: "Surge engine failed", description: "Could not connect to server.", variant: "destructive" });
+    } finally {
+      setSurgeRunning(false);
+    }
+  };
+
   return (
     <div className="container mx-auto p-4 max-w-7xl py-8 space-y-8">
-      <div>
-        <div className="flex items-center gap-2 mb-1">
-          <Activity className="h-5 w-5 text-primary" />
-          <h1 className="text-3xl font-bold tracking-tight">Platform Analytics</h1>
-          <Badge variant="outline" className="ml-2 text-xs">Admin View</Badge>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <Activity className="h-5 w-5 text-primary" />
+            <h1 className="text-3xl font-bold tracking-tight">Platform Analytics</h1>
+            <Badge variant="outline" className="ml-2 text-xs">Admin View</Badge>
+          </div>
+          <p className="text-muted-foreground">Live overview of ParkEase Nairobi activity</p>
         </div>
-        <p className="text-muted-foreground">Live overview of ParkEase Nairobi activity</p>
+
+        <div className="flex flex-col items-end gap-2">
+          <Button
+            onClick={runSurgeEngine}
+            disabled={surgeRunning}
+            variant="outline"
+            className="gap-2 border-destructive/40 text-destructive hover:bg-destructive/5"
+          >
+            {surgeRunning ? (
+              <RefreshCw className="h-4 w-4 animate-spin" />
+            ) : (
+              <Zap className="h-4 w-4" />
+            )}
+            {surgeRunning ? "Running..." : "Run Surge Engine"}
+          </Button>
+          {surgeResult && (
+            <p className="text-xs text-muted-foreground max-w-xs text-right">{surgeResult}</p>
+          )}
+        </div>
       </div>
 
       {/* KPI Cards */}
@@ -117,7 +163,6 @@ export default function AdminAnalytics() {
 
       {/* Zone Grid */}
       <div className="grid lg:grid-cols-2 gap-6">
-        {/* Zone Availability Bar Chart */}
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
@@ -147,7 +192,6 @@ export default function AdminAnalytics() {
           </CardContent>
         </Card>
 
-        {/* Booking Status Pie */}
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
@@ -163,7 +207,7 @@ export default function AdminAnalytics() {
                 <ResponsiveContainer width="60%" height="100%">
                   <PieChart>
                     <Pie data={bookingsByStatus} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value">
-                      {bookingsByStatus.map((entry, i) => (
+                      {bookingsByStatus.map((entry) => (
                         <Cell key={entry.name} fill={entry.color} />
                       ))}
                     </Pie>
@@ -219,7 +263,6 @@ export default function AdminAnalytics() {
 
       {/* Bottom row */}
       <div className="grid lg:grid-cols-2 gap-6">
-        {/* Spot Types */}
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Spot Types</CardTitle>
@@ -245,7 +288,6 @@ export default function AdminAnalytics() {
           </CardContent>
         </Card>
 
-        {/* Surge + Demand Alerts */}
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
@@ -255,7 +297,10 @@ export default function AdminAnalytics() {
           </CardHeader>
           <CardContent className="space-y-3">
             {surgeZones.length === 0 && highDemandZones.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">No surge or high-demand zones right now.</p>
+              <div className="text-center py-6">
+                <p className="text-sm text-muted-foreground">No surge or high-demand zones right now.</p>
+                <p className="text-xs text-muted-foreground mt-1">Run the Surge Engine to auto-activate based on waitlists.</p>
+              </div>
             ) : (
               <>
                 {surgeZones.map((z) => (

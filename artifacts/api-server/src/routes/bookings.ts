@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, bookingsTable, spotsTable, usersTable, payoutsTable } from "@workspace/db";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, lt, gt, inArray } from "drizzle-orm";
 import {
   CreateBookingBody,
   UpdateBookingStatusBody,
@@ -67,10 +67,24 @@ router.get("/bookings", async (req, res) => {
 router.post("/bookings", async (req, res) => {
   const parsed = CreateBookingBody.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
-  const { spotId, commuterId, date, startHour, endHour } = parsed.data;
+  const { spotId, commuterId, date: rawDate, startHour, endHour } = parsed.data;
+  const date = rawDate instanceof Date ? rawDate.toISOString().split("T")[0] : String(rawDate);
 
   const spot = await db.query.spotsTable.findFirst({ where: eq(spotsTable.id, spotId) });
   if (!spot) return res.status(404).json({ error: "Spot not found" });
+
+  const overlap = await db.query.bookingsTable.findFirst({
+    where: and(
+      eq(bookingsTable.spotId, spotId),
+      eq(bookingsTable.date, date),
+      inArray(bookingsTable.status, ["pending", "confirmed"]),
+      lt(bookingsTable.startHour, endHour),
+      gt(bookingsTable.endHour, startHour)
+    ),
+  });
+  if (overlap) {
+    return res.status(409).json({ error: "This time slot is already booked. Please choose a different time." });
+  }
 
   const totalHours = endHour - startHour;
   const surgeMultiplier = 1.0;

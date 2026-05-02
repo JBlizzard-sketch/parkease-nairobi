@@ -150,4 +150,73 @@ router.get("/analytics/surge", async (req, res) => {
   });
 });
 
+router.post("/analytics/trigger-surge", async (_req, res) => {
+  const zones = ["Westlands", "CBD", "Upperhill", "Kilimani", "Hurlingham", "Parklands", "Karen", "Lavington"] as const;
+  const today = new Date().toISOString().split("T")[0];
+
+  const results = await Promise.all(
+    zones.map(async (zone) => {
+      const [waitlistEntries, pendingBookings] = await Promise.all([
+        db.query.waitlistTable.findMany({
+          where: and(eq(waitlistTable.zone, zone as any), eq(waitlistTable.date, today)),
+        }),
+        db.query.bookingsTable.findMany({
+          where: and(eq(bookingsTable.date, today)),
+        }),
+      ]);
+
+      const zoneBookings = pendingBookings.filter(async () => {
+        const spot = await db.query.spotsTable.findFirst({ where: eq(spotsTable.zone, zone as any) });
+        return !!spot;
+      });
+
+      const waitlistCount = waitlistEntries.length;
+      let multiplier: number | null = null;
+      let reason = "";
+
+      if (waitlistCount >= 4) {
+        multiplier = 2.0;
+        reason = `Very high demand: ${waitlistCount} commuters on waitlist`;
+      } else if (waitlistCount >= 2) {
+        multiplier = 1.5;
+        reason = `High demand: ${waitlistCount} commuters on waitlist`;
+      }
+
+      if (multiplier !== null) {
+        const existing = await db.query.surgeEventsTable.findFirst({
+          where: and(eq(surgeEventsTable.zone, zone as any), eq(surgeEventsTable.date, today)),
+        });
+        if (existing) {
+          await db.update(surgeEventsTable)
+            .set({ multiplier, reason })
+            .where(and(eq(surgeEventsTable.zone, zone as any), eq(surgeEventsTable.date, today)));
+        } else {
+          await db.insert(surgeEventsTable).values({
+            zone: zone as any,
+            date: today,
+            multiplier,
+            reason,
+            isEventDay: false,
+          });
+        }
+      } else {
+        await db.delete(surgeEventsTable)
+          .where(and(eq(surgeEventsTable.zone, zone as any), eq(surgeEventsTable.date, today)));
+      }
+
+      void zoneBookings;
+
+      return { zone, multiplier: multiplier ?? 1.0, waitlistCount };
+    })
+  );
+
+  const surgeZones = results.filter((r) => r.multiplier > 1);
+  return res.json({
+    message: surgeZones.length > 0
+      ? `Surge activated in ${surgeZones.length} zone(s): ${surgeZones.map(z => z.zone).join(", ")}`
+      : "No surge needed — demand is normal across all zones",
+    results,
+  });
+});
+
 export default router;
