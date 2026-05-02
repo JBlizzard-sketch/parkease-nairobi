@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useListSpots, useUpdateSpot, useDeleteSpot, getListSpotsQueryKey } from "@workspace/api-client-react";
+import { useState, useMemo } from "react";
+import { useListSpots, useUpdateSpot, useDeleteSpot, useListBookings, getListSpotsQueryKey, getListBookingsQueryKey } from "@workspace/api-client-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -14,11 +14,85 @@ import {
 import { Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { MapPin, Star, Car, Plus, Pencil, Trash2, Shield, Search, Eye, TrendingUp, Activity, Zap } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import { MapPin, Star, Car, Plus, Pencil, Trash2, Shield, Search, Eye, TrendingUp, Activity, Zap, BarChart2, Loader2, ChevronUp, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type SortKey = "bookings" | "rating" | "price" | "none";
 type FilterKey = "all" | "active" | "inactive";
+
+function SpotStatsPanel({ spotId }: { spotId: number }) {
+  const { data, isLoading } = useListBookings(
+    { spotId, limit: 200 } as any,
+    { query: { queryKey: getListBookingsQueryKey({ spotId, limit: 200 } as any) } }
+  );
+
+  const bk = data?.bookings ?? [];
+
+  const { totalEarnings, avgDuration, monthlyData } = useMemo(() => {
+    const totalEarnings = bk.reduce((s, b) => s + b.ownerEarning, 0);
+    const completed = bk.filter((b) => b.status === "completed");
+    const avgDuration = completed.length
+      ? Math.round((completed.reduce((s, b) => s + b.totalHours, 0) / completed.length) * 10) / 10
+      : null;
+
+    const now = new Date();
+    const map: Record<string, { month: string; bookings: number }> = {};
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = d.toISOString().substring(0, 7);
+      map[key] = { month: d.toLocaleString("en", { month: "short" }), bookings: 0 };
+    }
+    for (const b of bk) {
+      const m = b.date?.substring(0, 7);
+      if (m && map[m]) map[m].bookings++;
+    }
+    return { totalEarnings, avgDuration, monthlyData: Object.values(map) };
+  }, [bk]);
+
+  if (isLoading)
+    return (
+      <div className="mt-3 pt-3 border-t border-border flex items-center justify-center py-4">
+        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+      </div>
+    );
+
+  return (
+    <div className="mt-3 pt-3 border-t border-border space-y-3">
+      <div className="grid grid-cols-3 gap-2 text-center">
+        <div className="bg-muted/50 rounded-lg p-2">
+          <p className="text-sm font-bold">{bk.length}</p>
+          <p className="text-[10px] text-muted-foreground">All bookings</p>
+        </div>
+        <div className="bg-muted/50 rounded-lg p-2">
+          <p className="text-sm font-bold text-primary">KES {totalEarnings.toLocaleString()}</p>
+          <p className="text-[10px] text-muted-foreground">Net earned</p>
+        </div>
+        <div className="bg-muted/50 rounded-lg p-2">
+          <p className="text-sm font-bold">{avgDuration !== null ? `${avgDuration}h` : "—"}</p>
+          <p className="text-[10px] text-muted-foreground">Avg stay</p>
+        </div>
+      </div>
+      <div>
+        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Bookings — last 6 months</p>
+        <div className="h-24">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={monthlyData} margin={{ top: 0, right: 0, bottom: 0, left: -24 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+              <XAxis dataKey="month" fontSize={9} tickLine={false} axisLine={false} />
+              <YAxis fontSize={9} tickLine={false} axisLine={false} allowDecimals={false} />
+              <Tooltip
+                contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "11px" }}
+                formatter={(v) => [v, "Bookings"]}
+              />
+              <Bar dataKey="bookings" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} maxBarSize={20} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function OwnerSpots() {
   const { userId } = useCurrentUser();
@@ -29,6 +103,7 @@ export default function OwnerSpots() {
   const [filter, setFilter] = useState<FilterKey>("all");
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; title: string } | null>(null);
   const [surgePendingId, setSurgePendingId] = useState<number | null>(null);
+  const [openStatsId, setOpenStatsId] = useState<number | null>(null);
 
   const SURGE_STEPS = [1.0, 1.5, 2.0, 2.5] as const;
   type SurgeStep = typeof SURGE_STEPS[number];
@@ -393,6 +468,16 @@ export default function OwnerSpots() {
                     <Eye className="h-3.5 w-3.5" />
                   </Button>
                 </Link>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={cn("gap-1.5 flex-none", openStatsId === spot.id && "bg-primary/5 border-primary/40 text-primary")}
+                  onClick={() => setOpenStatsId(openStatsId === spot.id ? null : spot.id)}
+                  title="View spot analytics"
+                >
+                  <BarChart2 className="h-3.5 w-3.5" />
+                  {openStatsId === spot.id ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                </Button>
                 <Link href={`/owner/spots/${spot.id}/edit`} className="flex-1">
                   <Button variant="outline" size="sm" className="w-full gap-1.5" data-testid={`button-edit-spot-${spot.id}`}>
                     <Pencil className="h-3.5 w-3.5" /> Edit
@@ -409,6 +494,9 @@ export default function OwnerSpots() {
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
               </div>
+
+              {/* Per-spot analytics panel */}
+              {openStatsId === spot.id && <SpotStatsPanel spotId={spot.id} />}
             </CardContent>
           </Card>
         ))}

@@ -1,12 +1,13 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useGetZoneSummary, useListBookings, useListSpots, getGetZoneSummaryQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, LineChart, Line, AreaChart, Area } from "recharts";
-import { TrendingUp, Car, Users, Zap, MapPin, DollarSign, Activity, RefreshCw, Star, Clock, Shield, ArrowUpRight } from "lucide-react";
+import { TrendingUp, Car, Users, Zap, MapPin, DollarSign, Activity, RefreshCw, Star, Clock, Shield, ArrowUpRight, Phone } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 
 const ZONE_COLORS = ["#00A957", "#f59e0b", "#3b82f6", "#ef4444", "#8b5cf6", "#06b6d4", "#f97316", "#84cc16"];
 const PIE_COLORS = { Confirmed: "#00A957", Completed: "#3b82f6", Pending: "#f59e0b", Cancelled: "#ef4444" };
@@ -85,6 +86,32 @@ export default function AdminAnalytics() {
   const topSpotsByBookings = [...spots].sort((a, b) => b.totalBookings - a.totalBookings).slice(0, 5);
   const surgeZones = zones?.zones.filter((z) => z.surgeMultiplier > 1) ?? [];
   const highDemandZones = zones?.zones.filter((z) => z.waitlistCount > 0) ?? [];
+
+  const commuterRows = useMemo(() => {
+    const map: Record<number, { id: number; name: string; phone: string; count: number; totalSpend: number }> = {};
+    for (const b of bookings) {
+      if (!b.comuterId) continue;
+      if (!map[b.comuterId]) map[b.comuterId] = { id: b.comuterId, name: b.commuterName ?? "Unknown", phone: b.commuterPhone ?? "", count: 0, totalSpend: 0 };
+      map[b.comuterId].count++;
+      map[b.comuterId].totalSpend += b.totalAmount;
+    }
+    return Object.values(map)
+      .map((c) => ({ ...c, avgSpend: Math.round(c.totalSpend / c.count) }))
+      .sort((a, b) => b.totalSpend - a.totalSpend);
+  }, [bookings]);
+
+  const ownerRows = useMemo(() => {
+    const map: Record<number, { id: number; name: string; phone: string; spotCount: number; totalBookings: number; ratingSum: number; ratingCount: number }> = {};
+    for (const s of spots) {
+      if (!map[s.ownerId]) map[s.ownerId] = { id: s.ownerId, name: s.ownerName, phone: s.ownerPhone, spotCount: 0, totalBookings: 0, ratingSum: 0, ratingCount: 0 };
+      map[s.ownerId].spotCount++;
+      map[s.ownerId].totalBookings += s.totalBookings;
+      if (s.rating) { map[s.ownerId].ratingSum += s.rating; map[s.ownerId].ratingCount++; }
+    }
+    return Object.values(map)
+      .map((o) => ({ ...o, avgRating: o.ratingCount ? o.ratingSum / o.ratingCount : null }))
+      .sort((a, b) => b.totalBookings - a.totalBookings);
+  }, [spots]);
 
   const runSurgeEngine = async () => {
     setSurgeRunning(true);
@@ -264,6 +291,98 @@ export default function AdminAnalytics() {
             </div>
           </CardContent>
         </Card>
+      </div>
+
+      {/* ── USER OVERVIEW ── */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Users className="h-5 w-5 text-primary" />
+          <h2 className="text-xl font-bold">User Overview</h2>
+          <Badge variant="outline" className="text-xs ml-1">{commuterRows.length + ownerRows.length} accounts</Badge>
+        </div>
+        <div className="grid lg:grid-cols-2 gap-6">
+          {/* Commuters */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Car className="h-4 w-4 text-blue-500" />
+                Top Commuters
+                <Badge variant="outline" className="ml-auto text-xs">{commuterRows.length} total</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {commuterRows.length === 0 ? (
+                <div className="px-6 pb-6 text-center text-sm text-muted-foreground">No commuter data yet</div>
+              ) : (
+                <div>
+                  {commuterRows.slice(0, 8).map((c, i) => (
+                    <div key={c.id} className="flex items-center gap-3 px-6 py-2.5 border-b border-border/40 last:border-0 hover:bg-muted/20 transition-colors">
+                      <div className={cn("w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0",
+                        i === 0 ? "bg-primary text-white" : i === 1 ? "bg-secondary text-white" : i === 2 ? "bg-blue-500 text-white" : "bg-muted text-muted-foreground"
+                      )}>
+                        {i + 1}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{c.name}</p>
+                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Phone className="h-2.5 w-2.5" />{c.phone} · {c.count} booking{c.count !== 1 ? "s" : ""}
+                        </p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-sm font-bold">KES {c.totalSpend.toLocaleString()}</p>
+                        <p className="text-[10px] text-muted-foreground">avg KES {c.avgSpend.toLocaleString()}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Owners */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <MapPin className="h-4 w-4 text-primary" />
+                Space Owners
+                <Badge variant="outline" className="ml-auto text-xs">{ownerRows.length} total</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {ownerRows.length === 0 ? (
+                <div className="px-6 pb-6 text-center text-sm text-muted-foreground">No owner data yet</div>
+              ) : (
+                <div>
+                  {ownerRows.slice(0, 8).map((o, i) => (
+                    <div key={o.id} className="flex items-center gap-3 px-6 py-2.5 border-b border-border/40 last:border-0 hover:bg-muted/20 transition-colors">
+                      <div className={cn("w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0",
+                        i === 0 ? "bg-primary text-white" : i === 1 ? "bg-secondary text-white" : i === 2 ? "bg-blue-500 text-white" : "bg-muted text-muted-foreground"
+                      )}>
+                        {i + 1}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{o.name}</p>
+                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Phone className="h-2.5 w-2.5" />{o.phone} · {o.spotCount} spot{o.spotCount !== 1 ? "s" : ""}
+                        </p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-sm font-bold">{o.totalBookings} <span className="font-normal text-muted-foreground text-xs">bookings</span></p>
+                        {o.avgRating ? (
+                          <p className="text-[10px] text-amber-500 flex items-center gap-0.5 justify-end">
+                            <Star className="h-2.5 w-2.5 fill-current" />{o.avgRating.toFixed(1)} avg
+                          </p>
+                        ) : (
+                          <p className="text-[10px] text-muted-foreground">no reviews</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       {/* Bottom row: Top spots + Spot types + Surge */}
