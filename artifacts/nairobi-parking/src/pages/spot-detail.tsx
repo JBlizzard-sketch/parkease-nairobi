@@ -16,6 +16,7 @@ import { MapPin, Shield, Clock, Star, Car, Zap, ArrowLeft, CalendarDays, Lock, H
 import { Link } from "wouter";
 import { MapContainer, TileLayer, Marker } from "react-leaflet";
 import L from "leaflet";
+import { cn } from "@/lib/utils";
 
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -233,6 +234,16 @@ export default function SpotDetail() {
     const onDate = (spotBookings?.bookings ?? []).filter((b) => b.date === date);
     return onDate.find((b) => b.startHour < endHour && b.endHour > startHour) ?? null;
   }, [spotBookings, date, startHour, endHour]);
+
+  const bookedHoursOnDate = useMemo(() => {
+    const set = new Set<number>();
+    (spotBookings?.bookings ?? [])
+      .filter((b) => b.date === date)
+      .forEach((b) => {
+        for (let h = b.startHour; h < b.endHour; h++) set.add(h);
+      });
+    return set;
+  }, [spotBookings, date]);
 
   const { addToRecent } = useRecentlyViewed();
   useEffect(() => {
@@ -768,6 +779,63 @@ export default function SpotDetail() {
                   </Select>
                 </div>
               </div>
+
+              {/* Hourly timeline */}
+              {spot.availableTo > spot.availableFrom && (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Availability on {new Date(date + "T12:00:00").toLocaleDateString("en-KE", { weekday: "short", day: "numeric", month: "short" })}
+                  </p>
+                  <div className="relative">
+                    <div className="flex gap-px">
+                      {Array.from({ length: spot.availableTo - spot.availableFrom }, (_, i) => {
+                        const h = spot.availableFrom + i;
+                        const isBooked = bookedHoursOnDate.has(h);
+                        const isSelected = h >= startHour && h < endHour;
+                        const isConflict = isBooked && isSelected;
+                        return (
+                          <button
+                            key={h}
+                            type="button"
+                            title={`${fmtHour(h)}–${fmtHour(h + 1)}: ${isBooked ? "Booked" : "Available"}`}
+                            onClick={() => {
+                              if (!isBooked) {
+                                setStartHour(h);
+                                setEndHour(Math.min(h + (endHour - startHour || 1), spot.availableTo));
+                              }
+                            }}
+                            className={cn(
+                              "flex-1 h-6 rounded-sm transition-all first:rounded-l-md last:rounded-r-md relative",
+                              isConflict  ? "bg-red-500" :
+                              isBooked    ? "bg-red-200 cursor-not-allowed" :
+                              isSelected  ? "bg-primary" :
+                                            "bg-muted hover:bg-primary/20 cursor-pointer"
+                            )}
+                          />
+                        );
+                      })}
+                    </div>
+                    {/* Hour labels */}
+                    <div className="flex justify-between mt-1 text-[10px] text-muted-foreground select-none">
+                      <span>{fmtHour(spot.availableFrom)}</span>
+                      {spot.availableTo - spot.availableFrom >= 8 && (
+                        <span style={{ marginLeft: `${((Math.round((spot.availableFrom + spot.availableTo) / 2) - spot.availableFrom) / (spot.availableTo - spot.availableFrom)) * 100}%`, transform: "translateX(-50%)", position: "absolute", bottom: 0 }}>
+                          {fmtHour(Math.round((spot.availableFrom + spot.availableTo) / 2))}
+                        </span>
+                      )}
+                      <span>{fmtHour(spot.availableTo)}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+                    <span className="flex items-center gap-1"><span className="w-3 h-2 rounded-sm bg-primary inline-block" /> Your slot</span>
+                    <span className="flex items-center gap-1"><span className="w-3 h-2 rounded-sm bg-red-200 inline-block" /> Taken</span>
+                    <span className="flex items-center gap-1"><span className="w-3 h-2 rounded-sm bg-muted inline-block" /> Free</span>
+                    {bookedHoursOnDate.size > 0 && (
+                      <span className="ml-auto font-medium text-red-600">{bookedHoursOnDate.size}h booked today</span>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Availability indicator */}
               {hours > 0 && (
