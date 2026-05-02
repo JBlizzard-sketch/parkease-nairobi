@@ -11,11 +11,26 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { MapPin, Shield, Clock, Star, Car, Zap, ArrowLeft, CalendarDays, Lock, Heart, ChevronLeft, ChevronRight, Images } from "lucide-react";
+import { MapPin, Shield, Clock, Star, Car, Zap, ArrowLeft, CalendarDays, Lock, Heart, ChevronLeft, ChevronRight, Images, Share2, CheckCircle2, Phone } from "lucide-react";
 import { Link } from "wouter";
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const fmtHour = (h: number) => `${h % 12 || 12}:00 ${h < 12 ? "AM" : "PM"}`;
+
+const QUICK_DURATIONS = [
+  { label: "1h", hours: 1 },
+  { label: "2h", hours: 2 },
+  { label: "4h", hours: 4 },
+  { label: "8h", hours: 8 },
+  { label: "All day", hours: 10 },
+];
+
+const AVATAR_COLORS = [
+  "from-emerald-400 to-emerald-600",
+  "from-blue-400 to-blue-600",
+  "from-violet-400 to-violet-600",
+  "from-amber-400 to-amber-600",
+];
 
 export default function SpotDetail() {
   const params = useParams<{ id: string }>();
@@ -63,7 +78,14 @@ export default function SpotDetail() {
   const baseTotal = spot ? spot.pricePerHour * hours : 0;
   const total = Math.round(baseTotal * surgeMultiplier);
   const platformFee = Math.round(total * 0.15);
-  const ownerEarning = total - platformFee;
+
+  const applyQuickDuration = (h: number) => {
+    if (!spot) return;
+    const from = Math.max(startHour, spot.availableFrom);
+    const to = Math.min(from + h, spot.availableTo);
+    setStartHour(from);
+    setEndHour(to);
+  };
 
   const handleBook = () => {
     if (!userId) {
@@ -76,15 +98,18 @@ export default function SpotDetail() {
       return;
     }
     createBooking.mutate({
-      data: {
-        spotId: id,
-        commuterId: userId,
-        ownerId: spot.ownerId,
-        date,
-        startHour,
-        endHour,
-      } as any,
+      data: { spotId: id, commuterId: userId, ownerId: spot.ownerId, date, startHour, endHour } as any,
     });
+  };
+
+  const handleShare = async () => {
+    const url = window.location.href;
+    if (navigator.share) {
+      try { await navigator.share({ title: spot?.title, url }); } catch { /* cancelled */ }
+    } else {
+      await navigator.clipboard.writeText(url);
+      toast({ title: "Link copied!", description: "Share this spot with others." });
+    }
   };
 
   const photos = (spot?.photos as string[] | undefined) ?? [];
@@ -103,73 +128,83 @@ export default function SpotDetail() {
 
   if (!spot) {
     return (
-      <div className="container mx-auto p-8 text-center">
+      <div className="container mx-auto p-8 text-center space-y-3">
+        <MapPin className="h-12 w-12 mx-auto text-muted-foreground opacity-30" />
         <p className="text-muted-foreground">Spot not found.</p>
-        <Link href="/map"><Button className="mt-4">Browse Spots</Button></Link>
+        <Link href="/map"><Button>Browse Spots</Button></Link>
       </div>
     );
   }
 
+  const ownerInitial = spot.ownerName?.[0] ?? "?";
+  const ownerAvatarGrad = AVATAR_COLORS[(spot.ownerId - 1) % AVATAR_COLORS.length];
+  const reviewAvg = reviews?.reviews.length
+    ? reviews.reviews.reduce((s, r) => s + r.rating, 0) / reviews.reviews.length
+    : null;
+
   return (
     <div className="container mx-auto p-4 max-w-4xl py-8 space-y-6">
+      {/* Breadcrumb */}
       <div className="flex items-center gap-2">
         <Link href="/map">
           <Button variant="ghost" size="icon"><ArrowLeft className="h-5 w-5" /></Button>
         </Link>
-        <nav className="text-sm text-muted-foreground flex-1">
+        <nav className="text-sm text-muted-foreground flex-1 min-w-0">
           <Link href="/map" className="hover:text-foreground">Map</Link>
           <span className="mx-2">/</span>
-          <span className="text-foreground">{spot.title}</span>
+          <span className="text-foreground truncate">{spot.title}</span>
         </nav>
-        <button
-          onClick={() => toggleFavorite(id)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border hover:border-red-300 transition-colors text-sm"
-          aria-label={isFavorite(id) ? "Remove from saved" : "Save spot"}
-        >
-          <Heart className={`h-4 w-4 transition-colors ${isFavorite(id) ? "fill-red-500 text-red-500" : "text-muted-foreground"}`} />
-          <span className={`hidden sm:inline font-medium ${isFavorite(id) ? "text-red-500" : "text-muted-foreground"}`}>
-            {isFavorite(id) ? "Saved" : "Save"}
-          </span>
-        </button>
+        <div className="flex gap-2 flex-shrink-0">
+          <button
+            onClick={handleShare}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border hover:bg-muted transition-colors text-sm text-muted-foreground"
+          >
+            <Share2 className="h-4 w-4" />
+            <span className="hidden sm:inline">Share</span>
+          </button>
+          <button
+            onClick={() => toggleFavorite(id)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border transition-colors text-sm ${
+              isFavorite(id) ? "border-red-300 bg-red-50 text-red-500" : "border-border hover:border-red-300 text-muted-foreground"
+            }`}
+          >
+            <Heart className={`h-4 w-4 ${isFavorite(id) ? "fill-red-500 text-red-500" : ""}`} />
+            <span className="hidden sm:inline font-medium">{isFavorite(id) ? "Saved" : "Save"}</span>
+          </button>
+        </div>
       </div>
 
-      {/* Photo Carousel */}
+      {/* Photo carousel */}
       {photos.length > 0 ? (
-        <div className="relative rounded-xl overflow-hidden h-56 sm:h-72 bg-muted group">
+        <div className="relative rounded-xl overflow-hidden h-56 sm:h-80 bg-muted group">
           <img
             src={photos[photoIdx]}
             alt={`${spot.title} photo ${photoIdx + 1}`}
             className="w-full h-full object-cover"
-            onError={(e) => { (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1590674899484-d5640e854abe?w=600"; }}
+            onError={(e) => { (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1590674899484-d5640e854abe?w=800"; }}
           />
           {photos.length > 1 && (
             <>
-              <button
-                onClick={prevPhoto}
-                className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/60 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
-              >
+              <button onClick={prevPhoto} className="absolute left-3 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/60 text-white rounded-full p-2 opacity-0 group-hover:opacity-100 transition-opacity">
                 <ChevronLeft className="h-5 w-5" />
               </button>
-              <button
-                onClick={nextPhoto}
-                className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/60 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
-              >
+              <button onClick={nextPhoto} className="absolute right-3 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/60 text-white rounded-full p-2 opacity-0 group-hover:opacity-100 transition-opacity">
                 <ChevronRight className="h-5 w-5" />
               </button>
               <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
                 {photos.map((_, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setPhotoIdx(i)}
-                    className={`w-1.5 h-1.5 rounded-full transition-all ${i === photoIdx ? "bg-white scale-125" : "bg-white/50 hover:bg-white/80"}`}
-                  />
+                  <button key={i} onClick={() => setPhotoIdx(i)} className={`w-1.5 h-1.5 rounded-full transition-all ${i === photoIdx ? "bg-white scale-125" : "bg-white/50"}`} />
                 ))}
               </div>
-              <div className="absolute top-3 right-3 bg-black/40 text-white text-xs px-2 py-0.5 rounded-full flex items-center gap-1">
-                <Images className="h-3 w-3" />
-                {photoIdx + 1}/{photos.length}
+              <div className="absolute top-3 right-3 bg-black/40 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
+                <Images className="h-3 w-3" /> {photoIdx + 1}/{photos.length}
               </div>
             </>
+          )}
+          {surgeMultiplier > 1 && (
+            <div className="absolute top-3 left-3 bg-destructive text-white text-sm px-3 py-1.5 rounded-full flex items-center gap-1.5 font-semibold animate-pulse">
+              <Zap className="h-3.5 w-3.5" /> Surge ×{surgeMultiplier}
+            </div>
           )}
         </div>
       ) : (
@@ -184,12 +219,12 @@ export default function SpotDetail() {
       <div className="grid md:grid-cols-5 gap-6">
         {/* Left: Spot Info */}
         <div className="md:col-span-3 space-y-5">
-          {/* Hero */}
+          {/* Title + price */}
           <div className="rounded-xl bg-primary/10 border border-primary/20 p-6">
-            <div className="flex items-start justify-between gap-3 mb-3">
+            <div className="flex items-start justify-between gap-3 mb-4">
               <div>
                 <h1 className="text-2xl font-bold tracking-tight">{spot.title}</h1>
-                <div className="flex items-center gap-1 text-muted-foreground mt-1">
+                <div className="flex items-center gap-1 text-muted-foreground mt-1.5">
                   <MapPin className="h-4 w-4 flex-shrink-0" />
                   <span className="text-sm">{spot.address}</span>
                 </div>
@@ -197,6 +232,13 @@ export default function SpotDetail() {
               <div className="text-right flex-shrink-0">
                 <p className="text-2xl font-bold text-primary">KES {spot.pricePerHour}</p>
                 <p className="text-xs text-muted-foreground">per hour</p>
+                {reviewAvg && (
+                  <div className="flex items-center gap-1 justify-end mt-1">
+                    <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                    <span className="text-sm font-semibold">{reviewAvg.toFixed(1)}</span>
+                    <span className="text-xs text-muted-foreground">({reviews!.reviews.length})</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -206,11 +248,7 @@ export default function SpotDetail() {
               {spot.hasCctv && <Badge className="bg-emerald-600 text-white gap-1"><Shield className="h-3 w-3" />CCTV</Badge>}
               {spot.hasRoofing && <Badge className="bg-blue-600 text-white">Roofed</Badge>}
               {spot.hasGate && <Badge className="bg-gray-700 text-white">Gated</Badge>}
-              {surgeMultiplier > 1 && (
-                <Badge className="bg-destructive text-white gap-1 animate-pulse">
-                  <Zap className="h-3 w-3" />Surge ×{surgeMultiplier}
-                </Badge>
-              )}
+              {surgeMultiplier > 1 && <Badge className="bg-destructive text-white gap-1 animate-pulse"><Zap className="h-3 w-3" />Surge ×{surgeMultiplier}</Badge>}
             </div>
           </div>
 
@@ -224,48 +262,55 @@ export default function SpotDetail() {
 
           {/* Availability */}
           <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-2"><Clock className="h-4 w-4" />Availability</CardTitle></CardHeader>
-            <CardContent className="text-sm space-y-2">
-              <p className="text-muted-foreground">
-                {fmtHour(spot.availableFrom)} – {fmtHour(spot.availableTo)}
-              </p>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Clock className="h-4 w-4 text-primary" />Availability
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm font-medium">{fmtHour(spot.availableFrom)} – {fmtHour(spot.availableTo)}</p>
               <div className="flex flex-wrap gap-1.5">
                 {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map((day) => (
-                  <span
-                    key={day}
-                    className={`px-2 py-0.5 rounded text-xs font-medium ${
-                      (spot.availableDays as string[]).includes(day)
-                        ? "bg-primary text-white"
-                        : "bg-muted text-muted-foreground"
-                    }`}
-                  >
+                  <span key={day} className={`px-2.5 py-1 rounded-lg text-xs font-medium ${(spot.availableDays as string[]).includes(day) ? "bg-primary text-white" : "bg-muted text-muted-foreground"}`}>
                     {day}
                   </span>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-2 pt-1">
+                {[
+                  { label: `${spot.totalBookings} bookings`, ok: true },
+                  { label: "Quick confirmation", ok: true },
+                  ...(spot.hasCctv ? [{ label: "CCTV secured", ok: true }] : []),
+                ].map(({ label, ok }) => (
+                  <div key={label} className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <CheckCircle2 className={`h-3.5 w-3.5 ${ok ? "text-emerald-500" : "text-muted-foreground/30"}`} />
+                    {label}
+                  </div>
                 ))}
               </div>
             </CardContent>
           </Card>
 
-          {/* Surge notice */}
+          {/* Surge warning */}
           {surgeMultiplier > 1 && surge && (
             <Card className="border-destructive/30 bg-destructive/5">
               <CardContent className="p-4 flex items-start gap-3">
                 <Zap className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
                 <div>
                   <p className="font-semibold text-destructive">Surge Pricing Active</p>
-                  <p className="text-sm text-muted-foreground mt-0.5">{surge.reason} — ×{surgeMultiplier} multiplier applied</p>
+                  <p className="text-sm text-muted-foreground mt-0.5">{surge.reason} — ×{surgeMultiplier} multiplier on the base rate</p>
                 </div>
               </CardContent>
             </Card>
           )}
 
-          {/* Access Instructions */}
-          <Card className="border-dashed border-muted-foreground/40">
+          {/* Access hint */}
+          <Card className="border-dashed">
             <CardContent className="p-4 flex items-start gap-3">
               <Lock className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-0.5" />
               <div>
                 <p className="font-medium text-sm">Access Instructions</p>
-                <p className="text-sm text-muted-foreground mt-0.5">Revealed after confirmed Mpesa payment</p>
+                <p className="text-sm text-muted-foreground mt-0.5">Gate codes and entry details are revealed after confirmed Mpesa payment.</p>
               </div>
             </CardContent>
           </Card>
@@ -273,18 +318,23 @@ export default function SpotDetail() {
           {/* Owner */}
           <Card>
             <CardContent className="p-4 flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center font-bold text-primary">
-                {spot.ownerName?.[0]}
+              <div className={`w-11 h-11 rounded-full bg-gradient-to-br ${ownerAvatarGrad} flex items-center justify-center font-bold text-white text-lg flex-shrink-0`}>
+                {ownerInitial}
               </div>
-              <div>
-                <p className="font-medium">{spot.ownerName}</p>
-                <p className="text-sm text-muted-foreground">{spot.ownerPhone}</p>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold">{spot.ownerName}</p>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <Phone className="h-3 w-3 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">{spot.ownerPhone}</p>
+                </div>
               </div>
               {spot.rating && (
-                <div className="ml-auto flex items-center gap-1">
-                  <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
-                  <span className="font-semibold">{spot.rating.toFixed(1)}</span>
-                  <span className="text-xs text-muted-foreground">({spot.reviewCount})</span>
+                <div className="flex flex-col items-end flex-shrink-0">
+                  <div className="flex items-center gap-1">
+                    <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+                    <span className="font-bold">{spot.rating.toFixed(1)}</span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">{spot.reviewCount} reviews</span>
                 </div>
               )}
             </CardContent>
@@ -293,19 +343,36 @@ export default function SpotDetail() {
           {/* Reviews */}
           {reviews && reviews.reviews.length > 0 && (
             <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-2"><Star className="h-4 w-4 fill-amber-400 text-amber-400" />Reviews</CardTitle></CardHeader>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+                    Reviews
+                  </CardTitle>
+                  {reviewAvg && (
+                    <Badge variant="outline" className="text-amber-600 border-amber-200">
+                      {reviewAvg.toFixed(1)} avg
+                    </Badge>
+                  )}
+                </div>
+              </CardHeader>
               <CardContent className="space-y-4">
                 {reviews.reviews.map((review) => (
-                  <div key={review.id} className="border-b border-border last:border-0 pb-3 last:pb-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-medium text-sm">{review.reviewerName}</span>
-                      <div className="flex">
+                  <div key={review.id} className="border-b border-border last:border-0 pb-4 last:pb-0">
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
+                          {review.reviewerName?.charAt(0)}
+                        </div>
+                        <span className="font-semibold text-sm">{review.reviewerName}</span>
+                      </div>
+                      <div className="flex gap-0.5">
                         {Array.from({ length: 5 }).map((_, i) => (
-                          <Star key={i} className={`h-3 w-3 ${i < review.rating ? "fill-amber-400 text-amber-400" : "text-muted"}`} />
+                          <Star key={i} className={`h-3.5 w-3.5 ${i < review.rating ? "fill-amber-400 text-amber-400" : "text-muted-foreground/20"}`} />
                         ))}
                       </div>
                     </div>
-                    {review.comment && <p className="text-sm text-muted-foreground">{review.comment}</p>}
+                    {review.comment && <p className="text-sm text-muted-foreground italic">"{review.comment}"</p>}
                   </div>
                 ))}
               </CardContent>
@@ -315,28 +382,41 @@ export default function SpotDetail() {
 
         {/* Right: Booking Form */}
         <div className="md:col-span-2">
-          <Card className="sticky top-4 shadow-md">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2">
-                <CalendarDays className="h-5 w-5 text-primary" />
+          <Card className="sticky top-4 shadow-lg border-primary/10">
+            <CardHeader className="pb-3 bg-primary/5 border-b border-primary/10">
+              <CardTitle className="flex items-center gap-2 text-primary">
+                <CalendarDays className="h-5 w-5" />
                 Book This Spot
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="p-4 space-y-4">
               <div className="space-y-1.5">
-                <Label>Date</Label>
-                <Input
-                  type="date"
-                  value={date}
-                  min={today}
-                  onChange={(e) => setDate(e.target.value)}
-                  data-testid="input-date"
-                />
+                <Label className="text-sm font-medium">Date</Label>
+                <Input type="date" value={date} min={today} onChange={(e) => setDate(e.target.value)} data-testid="input-date" />
+              </div>
+
+              {/* Quick duration buttons */}
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">Quick Duration</Label>
+                <div className="flex gap-1.5 flex-wrap">
+                  {QUICK_DURATIONS.map(({ label, hours: h }) => (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => applyQuickDuration(h)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+                        endHour - startHour === h ? "bg-primary text-white border-primary" : "bg-card border-border hover:bg-muted"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label>Arrive</Label>
+                  <Label className="text-sm">Arrive</Label>
                   <Select value={String(startHour)} onValueChange={(v) => setStartHour(Number(v))}>
                     <SelectTrigger data-testid="select-start"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -347,7 +427,7 @@ export default function SpotDetail() {
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Leave</Label>
+                  <Label className="text-sm">Leave</Label>
                   <Select value={String(endHour)} onValueChange={(v) => setEndHour(Number(v))}>
                     <SelectTrigger data-testid="select-end"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -359,30 +439,31 @@ export default function SpotDetail() {
                 </div>
               </div>
 
-              {hours > 0 && (
-                <div className="bg-muted/50 rounded-lg p-3 space-y-1.5 text-sm">
+              {hours > 0 ? (
+                <div className="rounded-xl bg-muted/50 border border-border p-3 space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">KES {spot.pricePerHour} × {hours}h{surgeMultiplier > 1 ? ` × ${surgeMultiplier}×` : ""}</span>
+                    <span className="text-muted-foreground">
+                      KES {spot.pricePerHour} × {hours}h{surgeMultiplier > 1 ? ` × ×${surgeMultiplier}` : ""}
+                    </span>
                     <span>KES {total.toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between text-muted-foreground">
                     <span>Platform fee (15%)</span>
                     <span>−KES {platformFee.toLocaleString()}</span>
                   </div>
-                  <div className="flex justify-between font-bold border-t border-border pt-1.5 mt-1.5">
-                    <span>Total</span>
-                    <span className="text-primary">KES {total.toLocaleString()}</span>
+                  <div className="flex justify-between font-bold border-t border-border pt-2">
+                    <span>You pay</span>
+                    <span className="text-primary text-lg">KES {total.toLocaleString()}</span>
                   </div>
                 </div>
-              )}
-
-              {hours <= 0 && (
-                <p className="text-xs text-destructive">End time must be after start time</p>
+              ) : (
+                <p className="text-xs text-destructive text-center bg-destructive/5 rounded-lg p-2">
+                  End time must be after start time
+                </p>
               )}
 
               <Button
-                className="w-full"
-                size="lg"
+                className="w-full h-11 text-base font-semibold"
                 disabled={hours <= 0 || createBooking.isPending}
                 onClick={handleBook}
                 data-testid="button-book"
@@ -390,9 +471,15 @@ export default function SpotDetail() {
                 {createBooking.isPending ? "Creating booking..." : "Book & Pay via Mpesa"}
               </Button>
 
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Car className="h-3.5 w-3.5 flex-shrink-0" />
-                <span>{spot.totalBookings} bookings · Owner responds quickly</span>
+              <div className="flex flex-col gap-1.5 text-xs text-muted-foreground">
+                <div className="flex items-center gap-1.5">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />
+                  <span>Instant booking confirmation</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Car className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                  <span>{spot.totalBookings} bookings · Owner responds quickly</span>
+                </div>
               </div>
             </CardContent>
           </Card>
