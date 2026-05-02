@@ -1,0 +1,20 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "ul_eklvpExJc0su7kZYYX"
+uri = "file://artifacts/nairobi-parking/public/images/spot-1.png"
+type = "image"
+title = "Nairobi driveway parking spot"
+
+[[generated]]
+id = "AN7PwTFCJFd_H84geu_X4"
+uri = "file://artifacts/nairobi-parking/public/images/spot-2.png"
+type = "image"
+title = "Nairobi office basement parking"
+
+[[generated]]
+id = "SkmQBvGp47aBjpAjDfK0b"
+uri = "file://artifacts/nairobi-parking/public/images/spot-3.png"
+type = "image"
+title = "Nairobi church compound parking"

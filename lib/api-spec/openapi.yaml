@@ -1,22 +1,35 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: ParkEase Nairobi - Peer-to-peer parking marketplace API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: users
+    description: User profiles
+  - name: spots
+    description: Parking spots
+  - name: bookings
+    description: Bookings and reservations
+  - name: reviews
+    description: Ratings and reviews
+  - name: waitlist
+    description: Waiting list for high-demand zones
+  - name: payouts
+    description: Owner payout records
+  - name: analytics
+    description: Dashboard analytics and insights
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +37,517 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ─── USERS ────────────────────────────────────────────────────────────
+  /users:
+    post:
+      operationId: createUser
+      tags: [users]
+      summary: Create or register a user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /users/me:
+    get:
+      operationId: getMe
+      tags: [users]
+      summary: Get current user profile
+      parameters:
+        - in: query
+          name: userId
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+    put:
+      operationId: updateMe
+      tags: [users]
+      summary: Update current user profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  # ─── SPOTS ────────────────────────────────────────────────────────────
+  /spots:
+    get:
+      operationId: listSpots
+      tags: [spots]
+      summary: List parking spots
+      parameters:
+        - in: query
+          name: zone
+          schema:
+            type: string
+        - in: query
+          name: ownerId
+          schema:
+            type: integer
+        - in: query
+          name: minPrice
+          schema:
+            type: number
+        - in: query
+          name: maxPrice
+          schema:
+            type: number
+        - in: query
+          name: hasCctv
+          schema:
+            type: boolean
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: List of spots
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpotList"
+    post:
+      operationId: createSpot
+      tags: [spots]
+      summary: Create a new parking spot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSpotBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Spot"
+
+  /spots/map:
+    get:
+      operationId: getMapSpots
+      tags: [spots]
+      summary: Get spots for map view near coordinates
+      parameters:
+        - in: query
+          name: lat
+          required: true
+          schema:
+            type: number
+        - in: query
+          name: lng
+          required: true
+          schema:
+            type: number
+        - in: query
+          name: radiusKm
+          schema:
+            type: number
+            default: 3
+        - in: query
+          name: date
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: startHour
+          schema:
+            type: integer
+        - in: query
+          name: endHour
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Spots for map rendering
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MapSpotList"
+
+  /spots/{id}:
+    get:
+      operationId: getSpot
+      tags: [spots]
+      summary: Get a single parking spot
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Spot detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Spot"
+    put:
+      operationId: updateSpot
+      tags: [spots]
+      summary: Update a parking spot
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSpotBody"
+      responses:
+        "200":
+          description: Updated spot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Spot"
+    delete:
+      operationId: deleteSpot
+      tags: [spots]
+      summary: Delete a parking spot
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ─── BOOKINGS ─────────────────────────────────────────────────────────
+  /bookings:
+    get:
+      operationId: listBookings
+      tags: [bookings]
+      summary: List bookings
+      parameters:
+        - in: query
+          name: userId
+          schema:
+            type: integer
+        - in: query
+          name: spotId
+          schema:
+            type: integer
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [pending, confirmed, completed, cancelled, no_show]
+        - in: query
+          name: role
+          schema:
+            type: string
+            enum: [commuter, owner]
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: List of bookings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookingList"
+    post:
+      operationId: createBooking
+      tags: [bookings]
+      summary: Create a new booking
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBookingBody"
+      responses:
+        "201":
+          description: Booking created (payment pending)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+
+  /bookings/{id}:
+    get:
+      operationId: getBooking
+      tags: [bookings]
+      summary: Get a single booking (access instructions revealed if confirmed)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Booking detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+    put:
+      operationId: updateBookingStatus
+      tags: [bookings]
+      summary: Update booking status (confirm payment, cancel, mark no-show)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateBookingStatusBody"
+      responses:
+        "200":
+          description: Updated booking
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+
+  # ─── REVIEWS ──────────────────────────────────────────────────────────
+  /reviews:
+    get:
+      operationId: listReviews
+      tags: [reviews]
+      summary: List reviews
+      parameters:
+        - in: query
+          name: spotId
+          schema:
+            type: integer
+        - in: query
+          name: revieweeId
+          schema:
+            type: integer
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 10
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: List of reviews
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewList"
+    post:
+      operationId: createReview
+      tags: [reviews]
+      summary: Submit a review
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReviewBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Review"
+
+  # ─── WAITLIST ─────────────────────────────────────────────────────────
+  /waitlist:
+    get:
+      operationId: listWaitlist
+      tags: [waitlist]
+      summary: Get waitlist entries for a user or zone
+      parameters:
+        - in: query
+          name: userId
+          schema:
+            type: integer
+        - in: query
+          name: zone
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Waitlist entries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WaitlistList"
+    post:
+      operationId: joinWaitlist
+      tags: [waitlist]
+      summary: Join waitlist for a zone
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWaitlistBody"
+      responses:
+        "201":
+          description: Joined waitlist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WaitlistEntry"
+
+  /waitlist/{id}:
+    delete:
+      operationId: leaveWaitlist
+      tags: [waitlist]
+      summary: Leave waitlist
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Removed from waitlist
+
+  # ─── PAYOUTS ──────────────────────────────────────────────────────────
+  /payouts:
+    get:
+      operationId: listPayouts
+      tags: [payouts]
+      summary: List payouts for a spot owner
+      parameters:
+        - in: query
+          name: ownerId
+          required: true
+          schema:
+            type: integer
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: List of payouts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PayoutList"
+
+  # ─── ANALYTICS ────────────────────────────────────────────────────────
+  /analytics/owner-dashboard:
+    get:
+      operationId: getOwnerDashboard
+      tags: [analytics]
+      summary: Owner dashboard summary (earnings, occupancy, bookings)
+      parameters:
+        - in: query
+          name: ownerId
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Owner dashboard stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OwnerDashboard"
+
+  /analytics/zones:
+    get:
+      operationId: getZoneSummary
+      tags: [analytics]
+      summary: Available spot counts and surge info per zone
+      responses:
+        "200":
+          description: Zone-level summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ZoneSummaryList"
+
+  /analytics/surge:
+    get:
+      operationId: getSurgePricing
+      tags: [analytics]
+      summary: Surge pricing multiplier for a zone and date
+      parameters:
+        - in: query
+          name: zone
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: date
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Surge pricing info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SurgePricing"
+
 components:
   schemas:
     HealthStatus:
@@ -31,6 +555,642 @@ components:
       properties:
         status:
           type: string
-      required:
-        - status
+      required: [status]
 
+    # ─── USER ──────────────────────────────────────────────────────────
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [commuter, owner, both]
+        avatarUrl:
+          type: string
+          nullable: true
+        rating:
+          type: number
+          nullable: true
+        reviewCount:
+          type: integer
+        cancellationCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, name, phone, role, reviewCount, cancellationCount, createdAt]
+
+    CreateUserBody:
+      type: object
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [commuter, owner, both]
+      required: [name, phone, role]
+
+    UpdateUserBody:
+      type: object
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [commuter, owner, both]
+        avatarUrl:
+          type: string
+
+    # ─── SPOT ──────────────────────────────────────────────────────────
+    Spot:
+      type: object
+      properties:
+        id:
+          type: integer
+        ownerId:
+          type: integer
+        ownerName:
+          type: string
+        ownerPhone:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        address:
+          type: string
+        zone:
+          type: string
+          enum: [Westlands, CBD, Upperhill, Kilimani, Hurlingham, Parklands, Karen, Lavington, Other]
+        lat:
+          type: number
+        lng:
+          type: number
+        pricePerHour:
+          type: number
+        currency:
+          type: string
+          default: KES
+        availableFrom:
+          type: integer
+          description: Start hour (0-23)
+        availableTo:
+          type: integer
+          description: End hour (0-23)
+        availableDays:
+          type: array
+          items:
+            type: string
+            enum: [Mon, Tue, Wed, Thu, Fri, Sat, Sun]
+        photos:
+          type: array
+          items:
+            type: string
+        hasCctv:
+          type: boolean
+        hasRoofing:
+          type: boolean
+        hasGate:
+          type: boolean
+        accessInstructions:
+          type: string
+          nullable: true
+          description: Only returned after confirmed payment
+        spotType:
+          type: string
+          enum: [driveway, compound, basement, open_plot, church, office]
+        rating:
+          type: number
+          nullable: true
+        reviewCount:
+          type: integer
+        isActive:
+          type: boolean
+        totalBookings:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, ownerId, ownerName, ownerPhone, title, address, zone, lat, lng, pricePerHour, currency, availableFrom, availableTo, availableDays, photos, hasCctv, hasRoofing, hasGate, spotType, reviewCount, isActive, totalBookings, createdAt]
+
+    SpotList:
+      type: object
+      properties:
+        spots:
+          type: array
+          items:
+            $ref: "#/components/schemas/Spot"
+        total:
+          type: integer
+      required: [spots, total]
+
+    MapSpot:
+      type: object
+      properties:
+        id:
+          type: integer
+        lat:
+          type: number
+        lng:
+          type: number
+        pricePerHour:
+          type: number
+        zone:
+          type: string
+        title:
+          type: string
+        hasCctv:
+          type: boolean
+        rating:
+          type: number
+          nullable: true
+        isAvailable:
+          type: boolean
+        surgeMultiplier:
+          type: number
+      required: [id, lat, lng, pricePerHour, zone, title, hasCctv, isAvailable, surgeMultiplier]
+
+    MapSpotList:
+      type: object
+      properties:
+        spots:
+          type: array
+          items:
+            $ref: "#/components/schemas/MapSpot"
+        centerLat:
+          type: number
+        centerLng:
+          type: number
+      required: [spots, centerLat, centerLng]
+
+    CreateSpotBody:
+      type: object
+      properties:
+        ownerId:
+          type: integer
+        title:
+          type: string
+        description:
+          type: string
+        address:
+          type: string
+        zone:
+          type: string
+          enum: [Westlands, CBD, Upperhill, Kilimani, Hurlingham, Parklands, Karen, Lavington, Other]
+        lat:
+          type: number
+        lng:
+          type: number
+        pricePerHour:
+          type: number
+        availableFrom:
+          type: integer
+        availableTo:
+          type: integer
+        availableDays:
+          type: array
+          items:
+            type: string
+        photos:
+          type: array
+          items:
+            type: string
+        hasCctv:
+          type: boolean
+        hasRoofing:
+          type: boolean
+        hasGate:
+          type: boolean
+        accessInstructions:
+          type: string
+        spotType:
+          type: string
+          enum: [driveway, compound, basement, open_plot, church, office]
+      required: [ownerId, title, address, zone, lat, lng, pricePerHour, availableFrom, availableTo, availableDays, hasCctv, hasRoofing, hasGate, spotType]
+
+    UpdateSpotBody:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        address:
+          type: string
+        zone:
+          type: string
+        pricePerHour:
+          type: number
+        availableFrom:
+          type: integer
+        availableTo:
+          type: integer
+        availableDays:
+          type: array
+          items:
+            type: string
+        photos:
+          type: array
+          items:
+            type: string
+        hasCctv:
+          type: boolean
+        hasRoofing:
+          type: boolean
+        hasGate:
+          type: boolean
+        accessInstructions:
+          type: string
+        isActive:
+          type: boolean
+
+    # ─── BOOKING ───────────────────────────────────────────────────────
+    Booking:
+      type: object
+      properties:
+        id:
+          type: integer
+        spotId:
+          type: integer
+        spotTitle:
+          type: string
+        spotAddress:
+          type: string
+        spotLat:
+          type: number
+        spotLng:
+          type: number
+        comuterId:
+          type: integer
+        commuterName:
+          type: string
+        commuterPhone:
+          type: string
+        ownerId:
+          type: integer
+        date:
+          type: string
+          format: date
+        startHour:
+          type: integer
+        endHour:
+          type: integer
+        totalHours:
+          type: number
+        pricePerHour:
+          type: number
+        surgeMultiplier:
+          type: number
+        totalAmount:
+          type: number
+        platformFee:
+          type: number
+        ownerEarning:
+          type: number
+        status:
+          type: string
+          enum: [pending, confirmed, completed, cancelled, no_show]
+        mpesaCode:
+          type: string
+          nullable: true
+        accessInstructions:
+          type: string
+          nullable: true
+          description: Only returned when status is confirmed or completed
+        cancellationReason:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, spotId, spotTitle, spotAddress, spotLat, spotLng, comuterId, commuterName, commuterPhone, ownerId, date, startHour, endHour, totalHours, pricePerHour, surgeMultiplier, totalAmount, platformFee, ownerEarning, status, createdAt]
+
+    BookingList:
+      type: object
+      properties:
+        bookings:
+          type: array
+          items:
+            $ref: "#/components/schemas/Booking"
+        total:
+          type: integer
+      required: [bookings, total]
+
+    CreateBookingBody:
+      type: object
+      properties:
+        spotId:
+          type: integer
+        commuterId:
+          type: integer
+        date:
+          type: string
+          format: date
+        startHour:
+          type: integer
+        endHour:
+          type: integer
+        mpesaPhone:
+          type: string
+      required: [spotId, commuterId, date, startHour, endHour]
+
+    UpdateBookingStatusBody:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [confirmed, cancelled, completed, no_show]
+        mpesaCode:
+          type: string
+        cancellationReason:
+          type: string
+      required: [status]
+
+    # ─── REVIEW ────────────────────────────────────────────────────────
+    Review:
+      type: object
+      properties:
+        id:
+          type: integer
+        bookingId:
+          type: integer
+        reviewerId:
+          type: integer
+        reviewerName:
+          type: string
+        reviewerAvatarUrl:
+          type: string
+          nullable: true
+        revieweeId:
+          type: integer
+          nullable: true
+        spotId:
+          type: integer
+          nullable: true
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        comment:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, bookingId, reviewerId, reviewerName, rating, createdAt]
+
+    ReviewList:
+      type: object
+      properties:
+        reviews:
+          type: array
+          items:
+            $ref: "#/components/schemas/Review"
+        total:
+          type: integer
+        averageRating:
+          type: number
+          nullable: true
+      required: [reviews, total]
+
+    CreateReviewBody:
+      type: object
+      properties:
+        bookingId:
+          type: integer
+        reviewerId:
+          type: integer
+        revieweeId:
+          type: integer
+        spotId:
+          type: integer
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        comment:
+          type: string
+      required: [bookingId, reviewerId, rating]
+
+    # ─── WAITLIST ──────────────────────────────────────────────────────
+    WaitlistEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        userName:
+          type: string
+        zone:
+          type: string
+        date:
+          type: string
+          format: date
+        startHour:
+          type: integer
+        endHour:
+          type: integer
+        notified:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, userId, userName, zone, date, startHour, endHour, notified, createdAt]
+
+    WaitlistList:
+      type: object
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/WaitlistEntry"
+        total:
+          type: integer
+      required: [entries, total]
+
+    CreateWaitlistBody:
+      type: object
+      properties:
+        userId:
+          type: integer
+        zone:
+          type: string
+        date:
+          type: string
+          format: date
+        startHour:
+          type: integer
+        endHour:
+          type: integer
+      required: [userId, zone, date, startHour, endHour]
+
+    # ─── PAYOUTS ───────────────────────────────────────────────────────
+    Payout:
+      type: object
+      properties:
+        id:
+          type: integer
+        ownerId:
+          type: integer
+        bookingId:
+          type: integer
+        spotTitle:
+          type: string
+        grossAmount:
+          type: number
+        platformFee:
+          type: number
+        netAmount:
+          type: number
+        mpesaCode:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [pending, processing, paid, failed]
+        periodStart:
+          type: string
+          format: date
+        periodEnd:
+          type: string
+          format: date
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, ownerId, bookingId, spotTitle, grossAmount, platformFee, netAmount, status, periodStart, periodEnd, createdAt]
+
+    PayoutList:
+      type: object
+      properties:
+        payouts:
+          type: array
+          items:
+            $ref: "#/components/schemas/Payout"
+        total:
+          type: integer
+        totalPending:
+          type: number
+        totalPaid:
+          type: number
+      required: [payouts, total, totalPending, totalPaid]
+
+    # ─── ANALYTICS ─────────────────────────────────────────────────────
+    OwnerDashboard:
+      type: object
+      properties:
+        totalEarnings:
+          type: number
+        pendingPayouts:
+          type: number
+        totalBookings:
+          type: integer
+        completedBookings:
+          type: integer
+        cancelledBookings:
+          type: integer
+        occupancyRate:
+          type: number
+          description: Percentage 0-100
+        activeSpots:
+          type: integer
+        averageSpotRating:
+          type: number
+          nullable: true
+        earningsByMonth:
+          type: array
+          items:
+            $ref: "#/components/schemas/MonthlyEarning"
+        topSpots:
+          type: array
+          items:
+            $ref: "#/components/schemas/SpotSummary"
+      required: [totalEarnings, pendingPayouts, totalBookings, completedBookings, cancelledBookings, occupancyRate, activeSpots, earningsByMonth, topSpots]
+
+    MonthlyEarning:
+      type: object
+      properties:
+        month:
+          type: string
+        earnings:
+          type: number
+        bookings:
+          type: integer
+      required: [month, earnings, bookings]
+
+    SpotSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        zone:
+          type: string
+        earnings:
+          type: number
+        bookings:
+          type: integer
+        rating:
+          type: number
+          nullable: true
+      required: [id, title, zone, earnings, bookings]
+
+    ZoneSummary:
+      type: object
+      properties:
+        zone:
+          type: string
+        availableSpots:
+          type: integer
+        totalSpots:
+          type: integer
+        avgPricePerHour:
+          type: number
+        surgeMultiplier:
+          type: number
+        waitlistCount:
+          type: integer
+      required: [zone, availableSpots, totalSpots, avgPricePerHour, surgeMultiplier, waitlistCount]
+
+    ZoneSummaryList:
+      type: object
+      properties:
+        zones:
+          type: array
+          items:
+            $ref: "#/components/schemas/ZoneSummary"
+      required: [zones]
+
+    SurgePricing:
+      type: object
+      properties:
+        zone:
+          type: string
+        date:
+          type: string
+          format: date
+        multiplier:
+          type: number
+        reason:
+          type: string
+          nullable: true
+        isEventDay:
+          type: boolean
+      required: [zone, date, multiplier, isEventDay]

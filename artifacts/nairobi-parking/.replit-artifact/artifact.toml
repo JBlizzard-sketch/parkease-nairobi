@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "ParkEase Nairobi"
+version = "1.0.0"
+id = "artifacts/nairobi-parking"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 20417
+
+[services.development]
+run = "pnpm --filter @workspace/nairobi-parking run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/nairobi-parking", "run", "build" ]
+publicDir = "artifacts/nairobi-parking/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "20417"
+BASE_PATH = "/"
