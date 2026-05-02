@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useParams, useLocation } from "wouter";
-import { useGetSpot, useGetSurgePricing, useCreateBooking, useListReviews, useListBookings, useCreateReview, getGetSpotQueryKey, getGetSurgePricingQueryKey, getListBookingsQueryKey } from "@workspace/api-client-react";
+import { useGetSpot, useGetSurgePricing, useCreateBooking, useListReviews, useListBookings, useCreateReview, useListSpots, getGetSpotQueryKey, getGetSurgePricingQueryKey, getListBookingsQueryKey, getListSpotsQueryKey } from "@workspace/api-client-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useFavorites } from "@/hooks/use-favorites";
 import { useQueryClient } from "@tanstack/react-query";
@@ -79,6 +79,12 @@ export default function SpotDetail() {
   );
 
   const { data: reviews } = useListReviews({ spotId: id });
+
+  const { data: similarData } = useListSpots(
+    { zone: spot?.zone ?? "" },
+    { query: { enabled: !!spot?.zone, queryKey: getListSpotsQueryKey({ zone: spot?.zone ?? "" }) } }
+  );
+  const similarSpots = (similarData?.spots ?? []).filter((s) => s.id !== id && s.isActive).slice(0, 3);
 
   const userBookingsParams = { userId: userId ?? undefined, role: "commuter" as const, limit: 100 };
   const { data: userBookings } = useListBookings(
@@ -642,6 +648,47 @@ export default function SpotDetail() {
           </Card>
         </div>
       </div>
+
+      {/* ── SIMILAR SPOTS ── */}
+      {similarSpots.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold tracking-tight">More spots in {spot.zone}</h2>
+            <Link href={`/map?zone=${encodeURIComponent(spot.zone)}`} className="text-sm text-primary hover:underline font-medium">
+              See all →
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {similarSpots.map((s) => (
+              <Link key={s.id} href={`/spots/${s.id}`}>
+                <div className="group rounded-xl border border-border hover:border-primary/40 hover:shadow-md transition-all bg-card p-4 space-y-3 cursor-pointer">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm leading-tight group-hover:text-primary transition-colors line-clamp-1">{s.title}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1 line-clamp-1">
+                        <MapPin className="h-3 w-3 flex-shrink-0" />{s.address}
+                      </p>
+                    </div>
+                    <Badge variant="secondary" className="text-xs flex-shrink-0 capitalize">{s.spotType.replace("_", " ")}</Badge>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="font-bold text-primary text-base">KES {s.pricePerHour}<span className="text-xs font-normal text-muted-foreground">/hr</span></span>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                      {s.rating ? (
+                        <span className="flex items-center gap-0.5">
+                          <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                          {s.rating.toFixed(1)}
+                        </span>
+                      ) : null}
+                      {s.hasCctv && <Shield className="h-3.5 w-3.5 text-emerald-600" />}
+                    </div>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

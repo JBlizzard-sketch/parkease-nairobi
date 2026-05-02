@@ -25,6 +25,133 @@ import { cn } from "@/lib/utils";
 
 const fmtHour = (h: number) => `${h % 12 || 12}:00 ${h < 12 ? "AM" : "PM"}`;
 
+function pseudoQR(seed: string): boolean[][] {
+  let h = 5381;
+  for (let i = 0; i < seed.length; i++) {
+    h = (((h << 5) + h) ^ seed.charCodeAt(i)) >>> 0;
+  }
+  return Array.from({ length: 8 }, (_, r) =>
+    Array.from({ length: 8 }, (_, c) => {
+      const corner = (r < 2 && c < 2) || (r < 2 && c > 5) || (r > 5 && c < 2);
+      if (corner) return true;
+      if ((r === 2 && c < 3) || (r < 3 && c === 2)) return true;
+      return ((h * (r + 1) * (c + 3) + r * 7 + c) & 1) === 0;
+    })
+  );
+}
+
+function formatEntryCode(bookingId: number, mpesaCode?: string | null): string {
+  const base = mpesaCode ? mpesaCode.slice(0, 8) : String(bookingId * 7919 + 42).padStart(8, "0").slice(0, 8);
+  return `PKES-${base.slice(0, 4).toUpperCase()}-${base.slice(4, 8).toUpperCase()}`;
+}
+
+function fmtDateShort(d: string) {
+  try {
+    return new Date(d + "T00:00:00").toLocaleDateString("en-KE", { weekday: "short", day: "numeric", month: "short" });
+  } catch { return d; }
+}
+
+function EntryPassCard({
+  booking,
+  bookingId,
+}: {
+  booking: { spotTitle: string; spotAddress: string; date: string; startHour: number; endHour: number; totalHours: number; mpesaCode?: string | null; status: string };
+  bookingId: number;
+}) {
+  const [copied, setCopied] = useState(false);
+  const code = formatEntryCode(bookingId, booking.mpesaCode);
+  const qr = pseudoQR(code);
+  const copyCode = () => {
+    navigator.clipboard.writeText(code).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+  return (
+    <div className="relative rounded-2xl overflow-hidden border-2 border-primary/30 shadow-md bg-card">
+      <div className="bg-primary px-5 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-6 bg-white/20 rounded-md flex items-center justify-center text-white font-bold font-mono text-xs">P</div>
+          <span className="text-white font-bold text-sm tracking-wide">ParkEase Entry Pass</span>
+        </div>
+        <span className="bg-white/20 text-white text-xs font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+          {booking.status === "completed" ? "Used" : "Valid"}
+        </span>
+      </div>
+
+      <div className="p-5">
+        <div className="flex gap-4 items-start">
+          <div className="flex-1 min-w-0 space-y-3">
+            <div>
+              <p className="font-bold text-base leading-tight">{booking.spotTitle}</p>
+              <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1 flex items-center gap-1">
+                <MapPin className="h-3 w-3 flex-shrink-0" />{booking.spotAddress}
+              </p>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { label: "Date",   value: fmtDateShort(booking.date) },
+                { label: "Arrive", value: fmtHour(booking.startHour) },
+                { label: "Leave",  value: fmtHour(booking.endHour) },
+              ].map(({ label, value }) => (
+                <div key={label} className="bg-muted/50 rounded-lg px-2 py-2 text-center">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{label}</p>
+                  <p className="text-xs font-bold mt-0.5 leading-tight">{value}</p>
+                </div>
+              ))}
+            </div>
+            <div className="space-y-1.5">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">Entry Code</p>
+              <div className="flex items-center gap-2">
+                <code className="text-base font-mono font-bold tracking-widest text-primary bg-primary/5 border border-primary/20 rounded-lg px-3 py-1.5 flex-1 text-center">
+                  {code}
+                </code>
+                <button
+                  onClick={copyCode}
+                  className="p-2 rounded-lg border border-border hover:bg-muted transition-colors text-muted-foreground hover:text-foreground flex-shrink-0"
+                  title="Copy entry code"
+                >
+                  {copied ? <CheckCircle2 className="h-4 w-4 text-primary" /> : <Copy className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex-shrink-0 p-2 border-2 border-border rounded-xl bg-white">
+            <div className="grid gap-0.5" style={{ gridTemplateColumns: "repeat(8, 1fr)" }}>
+              {qr.map((row, r) =>
+                row.map((cell, c) => (
+                  <div
+                    key={`${r}-${c}`}
+                    className={`w-3 h-3 rounded-sm ${cell ? "bg-gray-900" : "bg-white"}`}
+                  />
+                ))
+              )}
+            </div>
+            <p className="text-[9px] text-muted-foreground text-center mt-1.5 leading-none">Scan at gate</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="relative mx-5 h-0">
+        <div className="absolute inset-0 border-t-2 border-dashed border-border/60 -mx-5" />
+        <div className="absolute -left-8 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-background border border-border/40" />
+        <div className="absolute -right-8 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-background border border-border/40" />
+      </div>
+
+      <div className="px-5 py-3 flex items-center justify-between bg-muted/30 mt-0">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Car className="h-3.5 w-3.5" />
+          <span>Booking #{bookingId} · {booking.totalHours}h duration</span>
+        </div>
+        <div className="flex items-center gap-1 text-xs text-emerald-600 font-semibold">
+          <CheckCircle2 className="h-3.5 w-3.5" />Paid
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const generateMpesaCode = () => {
   const chars = "ABCDEFGHJKMNPQRSTVWXYZ0123456789";
   return Array.from({ length: 10 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
@@ -364,6 +491,11 @@ export default function BookingConfirmation() {
           )}
         </CardContent>
       </Card>
+
+      {/* ── ENTRY PASS ── */}
+      {(isConfirmed || isCompleted) && (
+        <EntryPassCard booking={booking} bookingId={bookingId} />
+      )}
 
       {/* ── MPESA PAYMENT FLOW ── */}
       {isPending && (

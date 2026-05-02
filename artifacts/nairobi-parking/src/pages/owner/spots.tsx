@@ -28,6 +28,32 @@ export default function OwnerSpots() {
   const [sortBy, setSortBy] = useState<SortKey>("bookings");
   const [filter, setFilter] = useState<FilterKey>("all");
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; title: string } | null>(null);
+  const [surgePendingId, setSurgePendingId] = useState<number | null>(null);
+
+  const SURGE_STEPS = [1.0, 1.5, 2.0, 2.5] as const;
+  type SurgeStep = typeof SURGE_STEPS[number];
+
+  const handleSurge = (id: number, multiplier: SurgeStep) => {
+    setSurgePendingId(id);
+    updateSpot.mutate(
+      { id, data: { surgeMultiplier: multiplier } as any },
+      {
+        onSuccess: () => {
+          setSurgePendingId(null);
+          queryClient.invalidateQueries({ queryKey: getListSpotsQueryKey({ ownerId: userId ?? undefined }) });
+          toast({
+            title: multiplier > 1
+              ? `⚡ Surge ×${multiplier} enabled`
+              : "Surge pricing disabled",
+            description: multiplier > 1
+              ? `Commuters will see KES pricing at ×${multiplier} rate`
+              : "Standard pricing restored",
+          });
+        },
+        onError: () => { setSurgePendingId(null); toast({ title: "Failed to update surge", variant: "destructive" }); },
+      }
+    );
+  };
 
   const { data, isLoading } = useListSpots(
     { ownerId: userId ?? undefined },
@@ -276,8 +302,20 @@ export default function OwnerSpots() {
               {/* Stats row */}
               <div className="grid grid-cols-3 gap-2 bg-muted/40 rounded-lg p-3">
                 <div className="text-center">
-                  <p className="text-base font-bold text-primary">KES {spot.pricePerHour}</p>
-                  <p className="text-[10px] text-muted-foreground">per hour</p>
+                  {(spot as any).surgeMultiplier > 1 ? (
+                    <>
+                      <p className="text-base font-bold text-red-600 flex items-center justify-center gap-0.5">
+                        <Zap className="h-3.5 w-3.5" />
+                        KES {Math.round(spot.pricePerHour * (spot as any).surgeMultiplier)}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground line-through">KES {spot.pricePerHour}</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-base font-bold text-primary">KES {spot.pricePerHour}</p>
+                      <p className="text-[10px] text-muted-foreground">per hour</p>
+                    </>
+                  )}
                 </div>
                 <div className="text-center border-x border-border/50">
                   <p className="text-base font-bold flex items-center justify-center gap-0.5">
@@ -300,6 +338,52 @@ export default function OwnerSpots() {
                     </>
                   )}
                 </div>
+              </div>
+
+              {/* Surge pricing control */}
+              <div className="rounded-lg border border-border/60 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    <Zap className="h-3.5 w-3.5" />
+                    Surge Pricing
+                  </div>
+                  {(spot as any).surgeMultiplier > 1 ? (
+                    <span className="inline-flex items-center gap-1 text-xs font-bold text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">
+                      <Zap className="h-3 w-3" />Active ×{(spot as any).surgeMultiplier}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground/60 font-medium">Off</span>
+                  )}
+                </div>
+                <div className="flex gap-1.5">
+                  {SURGE_STEPS.map((step) => {
+                    const isActive = Math.abs(((spot as any).surgeMultiplier ?? 1) - step) < 0.01;
+                    const isPending = surgePendingId === spot.id;
+                    return (
+                      <button
+                        key={step}
+                        disabled={isPending || isActive}
+                        onClick={() => handleSurge(spot.id, step)}
+                        className={cn(
+                          "flex-1 py-1.5 text-xs font-semibold rounded-lg border transition-all",
+                          isActive
+                            ? step === 1
+                              ? "bg-muted border-border text-muted-foreground cursor-default"
+                              : "bg-red-600 border-red-600 text-white cursor-default shadow-sm"
+                            : "bg-card border-border text-muted-foreground hover:border-primary hover:text-primary",
+                          isPending && "opacity-50 cursor-wait"
+                        )}
+                      >
+                        {step === 1 ? "Off" : `×${step}`}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[10px] text-muted-foreground leading-snug">
+                  {(spot as any).surgeMultiplier > 1
+                    ? `Commuters see KES ${Math.round(spot.pricePerHour * (spot as any).surgeMultiplier)}/hr · ${Math.round(((spot as any).surgeMultiplier - 1) * 100)}% revenue boost`
+                    : "Enable surge during peak hours to boost earnings"}
+                </p>
               </div>
 
               {/* Actions */}
