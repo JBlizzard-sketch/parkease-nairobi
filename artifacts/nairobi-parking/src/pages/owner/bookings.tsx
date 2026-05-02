@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useListBookings, useUpdateBookingStatus, getListBookingsQueryKey } from "@workspace/api-client-react";
+import { useListBookings, useUpdateBookingStatus, useCreateReview, getListBookingsQueryKey } from "@workspace/api-client-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Calendar, Clock, User, Check, X, DollarSign, CheckCircle2, TrendingUp, Loader2, MessageSquare } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Calendar, Clock, User, Check, X, DollarSign, CheckCircle2, TrendingUp, Loader2, MessageSquare, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -28,6 +29,10 @@ export default function OwnerBookings() {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<Status>("pending");
   const [updating, setUpdating] = useState<number | null>(null);
+  const [ratingOpen, setRatingOpen] = useState<number | null>(null);
+  const [ratingValue, setRatingValue] = useState(5);
+  const [ratingComment, setRatingComment] = useState("");
+  const [ratedBookings, setRatedBookings] = useState<Set<number>>(new Set());
 
   const qk = () =>
     getListBookingsQueryKey({ userId: userId ?? undefined, role: "owner", limit: 100 });
@@ -36,6 +41,19 @@ export default function OwnerBookings() {
     { userId: userId ?? undefined, role: "owner", limit: 100 },
     { query: { enabled: !!userId, queryKey: qk() } }
   );
+
+  const rateCommuter = useCreateReview({
+    mutation: {
+      onSuccess: (_d, vars) => {
+        const bookingId = (vars.data as any).bookingId as number;
+        setRatedBookings((prev) => new Set([...prev, bookingId]));
+        setRatingOpen(null);
+        setRatingComment("");
+        setRatingValue(5);
+        toast({ title: "Rating submitted!", description: "Your feedback has been recorded." });
+      },
+    },
+  });
 
   const updateStatus = useUpdateBookingStatus({
     mutation: {
@@ -53,6 +71,19 @@ export default function OwnerBookings() {
   const handleAction = (id: number, status: "confirmed" | "cancelled" | "completed") => {
     setUpdating(id);
     updateStatus.mutate({ id, data: { status } });
+  };
+
+  const handleRate = (bookingId: number, commuterId: number) => {
+    if (!userId) return;
+    rateCommuter.mutate({
+      data: {
+        bookingId,
+        reviewerId: userId,
+        revieweeId: commuterId as number,
+        rating: ratingValue,
+        comment: ratingComment,
+      } as any,
+    });
   };
 
   if (!userId) return <div className="p-8 text-center text-muted-foreground">Please log in as an owner.</div>;
@@ -164,8 +195,75 @@ export default function OwnerBookings() {
                   Mark Done
                 </Button>
               )}
+              {booking.status === "completed" && !ratedBookings.has(booking.id) && ratingOpen !== booking.id && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5 border-amber-300 text-amber-700 hover:bg-amber-50"
+                  onClick={() => { setRatingOpen(booking.id); setRatingValue(5); setRatingComment(""); }}
+                >
+                  <Star className="h-3.5 w-3.5" />
+                  Rate Driver
+                </Button>
+              )}
+              {booking.status === "completed" && ratedBookings.has(booking.id) && (
+                <span className="text-xs text-emerald-600 flex items-center gap-1">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Rated
+                </span>
+              )}
             </div>
           </div>
+
+          {/* Inline commuter rating form */}
+          {ratingOpen === booking.id && (
+            <div className="mt-4 pt-4 border-t border-border space-y-3">
+              <p className="text-sm font-semibold flex items-center gap-2">
+                <Star className="h-4 w-4 text-amber-500" />
+                Rate {booking.commuterName}
+              </p>
+              <div className="flex gap-1 items-center">
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setRatingValue(n)}
+                    className="transition-transform hover:scale-110"
+                  >
+                    <Star className={`h-7 w-7 ${n <= ratingValue ? "fill-amber-400 text-amber-400" : "text-muted-foreground/30"}`} />
+                  </button>
+                ))}
+                <span className="ml-1.5 text-sm font-medium text-amber-600">
+                  {["", "Poor", "Fair", "Good", "Great", "Excellent"][ratingValue]}
+                </span>
+              </div>
+              <Textarea
+                rows={2}
+                placeholder="Punctual? Left the space clean? (optional)"
+                value={ratingComment}
+                onChange={(e) => setRatingComment(e.target.value)}
+                className="text-sm"
+              />
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  className="bg-amber-500 hover:bg-amber-600 text-white gap-1.5"
+                  onClick={() => handleRate(booking.id, booking.comuterId)}
+                  disabled={rateCommuter.isPending}
+                >
+                  {rateCommuter.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Star className="h-3.5 w-3.5 fill-white" />}
+                  Submit Rating
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-muted-foreground"
+                  onClick={() => setRatingOpen(null)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     );

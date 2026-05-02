@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useParams, useLocation } from "wouter";
-import { useGetSpot, useGetSurgePricing, useCreateBooking, useListReviews, getGetSpotQueryKey, getGetSurgePricingQueryKey } from "@workspace/api-client-react";
+import { useGetSpot, useGetSurgePricing, useCreateBooking, useListReviews, useListBookings, useCreateReview, getGetSpotQueryKey, getGetSurgePricingQueryKey, getListBookingsQueryKey } from "@workspace/api-client-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useFavorites } from "@/hooks/use-favorites";
 import { useQueryClient } from "@tanstack/react-query";
@@ -46,6 +46,9 @@ export default function SpotDetail() {
   const [startHour, setStartHour] = useState(8);
   const [endHour, setEndHour] = useState(17);
   const [photoIdx, setPhotoIdx] = useState(0);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState("");
+  const [reviewSubmitted, setReviewSubmitted] = useState(false);
 
   const { data: spot, isLoading } = useGetSpot(id, {
     query: { enabled: !!id, queryKey: getGetSpotQueryKey(id) },
@@ -58,6 +61,21 @@ export default function SpotDetail() {
   );
 
   const { data: reviews } = useListReviews({ spotId: id });
+
+  const userBookingsParams = { userId: userId ?? undefined, role: "commuter" as const, limit: 100 };
+  const { data: userBookings } = useListBookings(
+    userBookingsParams,
+    { query: { enabled: !!userId, queryKey: getListBookingsQueryKey(userBookingsParams) } }
+  );
+
+  const createReview = useCreateReview({
+    mutation: {
+      onSuccess: () => {
+        setReviewSubmitted(true);
+        toast({ title: "Review submitted!", description: "Thank you — it helps other drivers." });
+      },
+    },
+  });
 
   const createBooking = useCreateBooking({
     mutation: {
@@ -78,6 +96,25 @@ export default function SpotDetail() {
   const baseTotal = spot ? spot.pricePerHour * hours : 0;
   const total = Math.round(baseTotal * surgeMultiplier);
   const platformFee = Math.round(total * 0.15);
+
+  const completedBookingHere = userBookings?.bookings.find(
+    (b) => b.spotId === id && b.status === "completed"
+  );
+  const alreadyReviewed = reviews?.reviews.some((r) => r.reviewerId === userId);
+  const canReview = !!completedBookingHere && !alreadyReviewed && !reviewSubmitted;
+
+  const handleReview = () => {
+    if (!userId || !completedBookingHere) return;
+    createReview.mutate({
+      data: {
+        bookingId: completedBookingHere.id,
+        reviewerId: userId,
+        spotId: id,
+        rating: reviewRating,
+        comment: reviewComment,
+      } as any,
+    });
+  };
 
   const applyQuickDuration = (h: number) => {
     if (!spot) return;
@@ -375,6 +412,76 @@ export default function SpotDetail() {
                     {review.comment && <p className="text-sm text-muted-foreground italic">"{review.comment}"</p>}
                   </div>
                 ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Write a review — shown only to commuters with a completed booking here */}
+          {canReview && (
+            <Card className="border-amber-200 bg-amber-50/40">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Star className="h-4 w-4 text-amber-500" />
+                  Rate Your Stay
+                </CardTitle>
+                <p className="text-xs text-muted-foreground">You parked here — share your experience with other drivers.</p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Star picker */}
+                <div className="space-y-1.5">
+                  <p className="text-sm font-medium">Your rating</p>
+                  <div className="flex gap-1">
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => setReviewRating(n)}
+                        className="transition-transform hover:scale-110"
+                      >
+                        <Star className={`h-8 w-8 ${n <= reviewRating ? "fill-amber-400 text-amber-400" : "text-muted-foreground/30"}`} />
+                      </button>
+                    ))}
+                    <span className="ml-2 text-sm font-semibold text-amber-600 self-center">
+                      {["", "Poor", "Fair", "Good", "Great", "Excellent"][reviewRating]}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Comments <span className="text-muted-foreground font-normal">(optional)</span></label>
+                  <textarea
+                    rows={3}
+                    value={reviewComment}
+                    onChange={(e) => setReviewComment(e.target.value)}
+                    placeholder="How was the access, security, or location?"
+                    className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
+
+                <button
+                  onClick={handleReview}
+                  disabled={createReview.isPending}
+                  className="w-full h-10 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-semibold text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {createReview.isPending ? (
+                    <><span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" /> Submitting...</>
+                  ) : (
+                    <><Star className="h-4 w-4 fill-white" /> Submit Review</>
+                  )}
+                </button>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Confirmation after submission */}
+          {reviewSubmitted && (
+            <Card className="border-emerald-200 bg-emerald-50/40">
+              <CardContent className="p-4 flex items-center gap-3">
+                <CheckCircle2 className="h-6 w-6 text-emerald-600 flex-shrink-0" />
+                <div>
+                  <p className="font-semibold text-emerald-800">Review submitted — thank you!</p>
+                  <p className="text-xs text-emerald-700 mt-0.5">Your {reviewRating}-star rating is now live for other drivers.</p>
+                </div>
               </CardContent>
             </Card>
           )}
