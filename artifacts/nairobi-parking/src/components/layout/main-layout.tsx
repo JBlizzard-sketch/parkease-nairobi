@@ -4,9 +4,11 @@ import { DemoSwitcher } from "@/components/demo-switcher";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useGetMe, getGetMeQueryKey, useListBookings } from "@workspace/api-client-react";
-import { LogOut, Menu, X, User, LayoutDashboard, Car, Bell, MapPin, TrendingUp, Clock, Shield } from "lucide-react";
+import { LogOut, Menu, X, User, LayoutDashboard, Car, Bell, MapPin, TrendingUp, Clock, Shield, Navigation } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+
+const fmtHour = (h: number) => `${h % 12 || 12}:00 ${h < 12 ? "AM" : "PM"}`;
 
 const AVATAR_COLORS: [string, string][] = [
   ["#00A957", "#007a3e"],
@@ -35,6 +37,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
   const { userId, role, logout, isAuthenticated } = useCurrentUser();
   const [location] = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [todayBannerDismissed, setTodayBannerDismissed] = useState(false);
 
   const { data: me } = useGetMe(
     { userId: userId ?? 0 },
@@ -51,11 +54,19 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
   const pendingCount = pendingBookingsData?.total ?? 0;
 
   const isCommuterOnly = role === "commuter";
+  const isCommuter = role === "commuter" || role === "both";
   const { data: commuterPendingData } = useListBookings(
     { userId: userId ?? 0, role: "commuter", status: "pending", limit: 50 },
     { query: { enabled: !!userId && isCommuterOnly, queryKey: ["commuter-pending-bell", userId] } }
   );
   const commuterPendingCount = commuterPendingData?.total ?? 0;
+
+  const todayStr = new Date().toISOString().split("T")[0];
+  const { data: confirmedTodayData } = useListBookings(
+    { userId: userId ?? 0, role: "commuter", status: "confirmed", limit: 20 },
+    { query: { enabled: !!userId && isCommuter, queryKey: ["confirmed-today-banner", userId] } }
+  );
+  const todayBooking = confirmedTodayData?.bookings.find((b) => b.date === todayStr) ?? null;
 
   const NavLink = ({ href, label, ownerStyle = false }: { href: string; label: string; ownerStyle?: boolean }) => (
     <Link
@@ -343,6 +354,40 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
           </div>
         )}
       </header>
+
+      {/* Today's parking reminder banner */}
+      {todayBooking && !todayBannerDismissed && (
+        <div className="bg-primary/10 border-b border-primary/20 px-4 py-2.5 flex items-center gap-3 flex-shrink-0">
+          <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
+            <Car className="h-3.5 w-3.5 text-primary" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-primary leading-tight truncate">
+              Parking today at {todayBooking.spotTitle}
+            </p>
+            <p className="text-xs text-muted-foreground truncate">
+              {fmtHour(todayBooking.startHour)} – {fmtHour(todayBooking.endHour)} · {todayBooking.spotAddress}
+            </p>
+          </div>
+          <Link href={`/bookings/${todayBooking.id}`}>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2.5 text-xs text-primary hover:bg-primary/10 flex items-center gap-1 flex-shrink-0"
+            >
+              <Navigation className="h-3 w-3" />
+              View
+            </Button>
+          </Link>
+          <button
+            onClick={() => setTodayBannerDismissed(true)}
+            className="p-1 hover:opacity-60 transition-opacity text-muted-foreground flex-shrink-0"
+            aria-label="Dismiss"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
 
       <main className="flex-1 flex flex-col">
         {children}

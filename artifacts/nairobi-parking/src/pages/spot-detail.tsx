@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useLocation } from "wouter";
 import { useGetSpot, useGetSurgePricing, useCreateBooking, useListReviews, useListBookings, useCreateReview, useListSpots, getGetSpotQueryKey, getGetSurgePricingQueryKey, getListBookingsQueryKey, getListSpotsQueryKey } from "@workspace/api-client-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -34,6 +34,27 @@ function createPriceIcon(price: number) {
 }
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
+
+const SPOT_PHOTO_IDS = [
+  "1590674899484-d5640e854abe",
+  "1487958449943-2429e8be8625",
+  "1494976388531-d1058494cdd8",
+  "1526770632009-2a0a5f3e0a53",
+  "1558618666-fcd25c85cd64",
+  "1570129477492-45c003446a2e",
+  "1449824913935-59a10b8d2000",
+  "1576767479416-d0f7a41a4c03",
+  "1543699565-47df2c5a9b4a",
+  "1611273426858-450d8e3c9fce",
+];
+
+function getSpotPhotos(spotId: number): string[] {
+  const count = 3 + (spotId % 2);
+  return Array.from({ length: count }, (_, i) => {
+    const idx = (spotId * 3 + i * 7) % SPOT_PHOTO_IDS.length;
+    return `https://images.unsplash.com/photo-${SPOT_PHOTO_IDS[idx]}?w=800&h=500&fit=crop&auto=format&q=80`;
+  });
+}
 const fmtHour = (h: number) => `${h % 12 || 12}:00 ${h < 12 ? "AM" : "PM"}`;
 
 const QUICK_DURATIONS = [
@@ -289,7 +310,12 @@ export default function SpotDetail() {
     }
   };
 
-  const photos = (spot?.photos as string[] | undefined) ?? [];
+  const photos = useMemo(() => {
+    const stored = (spot?.photos as string[] | undefined) ?? [];
+    if (stored.length > 0) return stored;
+    if (!spot) return [];
+    return getSpotPhotos(spot.id);
+  }, [spot]);
   const prevPhoto = () => setPhotoIdx((i) => (i - 1 + photos.length) % photos.length);
   const nextPhoto = () => setPhotoIdx((i) => (i + 1) % photos.length);
 
