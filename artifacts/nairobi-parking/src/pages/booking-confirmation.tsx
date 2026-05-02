@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useParams, useLocation } from "wouter";
 import { useGetBooking, useUpdateBookingStatus, useCreateReview, getGetBookingQueryKey } from "@workspace/api-client-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -9,10 +9,15 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
   CheckCircle2, Clock, MapPin, Smartphone, Lock, Star, ArrowLeft,
-  Copy, Share2, Loader2, AlertCircle, Receipt, Car
+  Copy, Share2, Loader2, AlertCircle, Receipt, Car, XCircle,
 } from "lucide-react";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
@@ -75,6 +80,7 @@ export default function BookingConfirmation() {
   const [reviewSubmitted, setReviewSubmitted] = useState(false);
   const [generatedCode, setGeneratedCode] = useState("");
   const [copied, setCopied] = useState(false);
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
 
   const { data: booking, isLoading } = useGetBooking(bookingId, {
     query: { enabled: !!bookingId, queryKey: getGetBookingQueryKey(bookingId) },
@@ -82,10 +88,15 @@ export default function BookingConfirmation() {
 
   const updateStatus = useUpdateBookingStatus({
     mutation: {
-      onSuccess: () => {
+      onSuccess: (_d, vars) => {
         queryClient.invalidateQueries({ queryKey: getGetBookingQueryKey(bookingId) });
-        setPayStep("success");
-        toast({ title: "Payment confirmed!", description: `Mpesa code: ${generatedCode}` });
+        if (vars.data.status === "cancelled") {
+          toast({ title: "Booking cancelled", description: "Your booking has been cancelled." });
+          setShowCancelDialog(false);
+        } else {
+          setPayStep("success");
+          toast({ title: "Payment confirmed!", description: `Mpesa code: ${generatedCode}` });
+        }
       },
       onError: () => {
         setPayStep("failed");
@@ -102,22 +113,20 @@ export default function BookingConfirmation() {
     },
   });
 
-  useEffect(() => {
-    if (payStep !== "waiting") return;
+  // Countdown timer for payment
+  const startCountdown = () => {
+    let c = 30;
     const interval = setInterval(() => {
-      setCountdown((c) => {
-        if (c <= 1) {
-          clearInterval(interval);
-          const code = generateMpesaCode();
-          setGeneratedCode(code);
-          updateStatus.mutate({ id: bookingId, data: { status: "confirmed", mpesaCode: code } });
-          return 0;
-        }
-        return c - 1;
-      });
+      c -= 1;
+      setCountdown(c);
+      if (c <= 0) {
+        clearInterval(interval);
+        const code = generateMpesaCode();
+        setGeneratedCode(code);
+        updateStatus.mutate({ id: bookingId, data: { status: "confirmed", mpesaCode: code } });
+      }
     }, 100);
-    return () => clearInterval(interval);
-  }, [payStep]);
+  };
 
   const handleSendSTK = () => {
     if (!phoneNumber.trim()) return;
@@ -125,6 +134,7 @@ export default function BookingConfirmation() {
     setTimeout(() => {
       setPayStep("waiting");
       setCountdown(30);
+      startCountdown();
     }, 2000);
   };
 
@@ -140,6 +150,10 @@ export default function BookingConfirmation() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
+  };
+
+  const handleCancelConfirm = () => {
+    updateStatus.mutate({ id: bookingId, data: { status: "cancelled" } });
   };
 
   if (isLoading) {
@@ -162,13 +176,53 @@ export default function BookingConfirmation() {
     );
   }
 
-  const isPending = booking.status === "pending";
+  const isPending   = booking.status === "pending";
   const isConfirmed = booking.status === "confirmed";
   const isCompleted = booking.status === "completed";
   const isCancelled = booking.status === "cancelled";
 
   return (
     <div className="container mx-auto p-4 max-w-xl py-8 space-y-5">
+      {/* Cancel confirmation dialog */}
+      <AlertDialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <XCircle className="h-5 w-5 text-destructive" />
+              Cancel this booking?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <span className="block">
+                You're about to cancel booking #{bookingId} at{" "}
+                <span className="font-semibold text-foreground">{booking.spotTitle}</span>.
+              </span>
+              {booking.mpesaCode && (
+                <span className="block text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5 text-sm">
+                  ⚠️ This booking has already been paid. Contact support to request a refund for Mpesa code{" "}
+                  <span className="font-mono font-bold">{booking.mpesaCode}</span>.
+                </span>
+              )}
+              {!booking.mpesaCode && (
+                <span className="block text-muted-foreground text-sm">
+                  Since you haven't paid yet, no charges will be made.
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep Booking</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleCancelConfirm}
+              className="bg-destructive hover:bg-destructive/90 text-white"
+              disabled={updateStatus.isPending}
+            >
+              {updateStatus.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+              Yes, Cancel It
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Header */}
       <div className="flex items-center gap-2">
         <Link href="/bookings">
@@ -191,15 +245,26 @@ export default function BookingConfirmation() {
       {/* Step indicator */}
       {!isCancelled && <StepIndicator status={booking.status} />}
 
+      {/* Cancelled banner */}
+      {isCancelled && (
+        <div className="flex items-center gap-3 p-4 rounded-xl bg-red-50 border border-red-200">
+          <XCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
+          <div>
+            <p className="font-semibold text-red-800">Booking Cancelled</p>
+            <p className="text-sm text-red-700 mt-0.5">This booking has been cancelled. Browse spots to book again.</p>
+          </div>
+        </div>
+      )}
+
       {/* Booking Summary Card */}
       <Card className="overflow-hidden">
         <div className={cn("px-4 py-2.5 flex items-center gap-2 text-sm font-semibold border-b",
-          isPending ? "bg-amber-50 text-amber-800 border-amber-200" :
+          isPending   ? "bg-amber-50 text-amber-800 border-amber-200" :
           isConfirmed ? "bg-emerald-50 text-emerald-800 border-emerald-200" :
           isCompleted ? "bg-blue-50 text-blue-800 border-blue-200" :
           "bg-red-50 text-red-800 border-red-200"
         )}>
-          {isPending ? <Clock className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
+          {isPending ? <Clock className="h-4 w-4" /> : isCancelled ? <XCircle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
           {isPending ? "Awaiting Payment" : isConfirmed ? "Confirmed — You're all set!" : isCompleted ? "Completed" : "Cancelled"}
         </div>
         <CardContent className="p-5 space-y-4">
@@ -248,7 +313,7 @@ export default function BookingConfirmation() {
             </div>
           </div>
 
-          {/* Mpesa receipt if paid */}
+          {/* Mpesa receipt */}
           {booking.mpesaCode && (
             <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-lg p-3">
               <div className="flex items-center gap-2">
@@ -260,11 +325,7 @@ export default function BookingConfirmation() {
                   <p className="font-mono text-sm font-bold text-emerald-900">{booking.mpesaCode}</p>
                 </div>
               </div>
-              <button
-                onClick={() => handleCopy(booking.mpesaCode!)}
-                className="text-emerald-600 hover:text-emerald-800 p-1.5 rounded"
-                title="Copy code"
-              >
+              <button onClick={() => handleCopy(booking.mpesaCode!)} className="text-emerald-600 hover:text-emerald-800 p-1.5 rounded" title="Copy code">
                 <Copy className="h-3.5 w-3.5" />
               </button>
             </div>
@@ -325,9 +386,7 @@ export default function BookingConfirmation() {
                   Send STK Push to {phoneNumber}
                 </Button>
 
-                <p className="text-center text-xs text-muted-foreground">
-                  This is a demo — no real money will be charged
-                </p>
+                <p className="text-center text-xs text-muted-foreground">This is a demo — no real money will be charged</p>
               </>
             )}
 
@@ -421,10 +480,7 @@ export default function BookingConfirmation() {
             <p className="text-sm text-emerald-900 leading-relaxed bg-white/60 rounded-lg p-3 border border-emerald-200" data-testid="text-access-instructions">
               {booking.accessInstructions}
             </p>
-            <button
-              className="mt-2 text-xs text-emerald-600 hover:text-emerald-800 flex items-center gap-1"
-              onClick={() => handleCopy(booking.accessInstructions!)}
-            >
+            <button className="mt-2 text-xs text-emerald-600 hover:text-emerald-800 flex items-center gap-1" onClick={() => handleCopy(booking.accessInstructions!)}>
               <Copy className="h-3 w-3" />
               {copied ? "Copied!" : "Copy instructions"}
             </button>
@@ -440,6 +496,17 @@ export default function BookingConfirmation() {
         </div>
       )}
 
+      {/* ── CANCEL BOOKING ── */}
+      {(isPending || isConfirmed) && (
+        <button
+          onClick={() => setShowCancelDialog(true)}
+          className="w-full flex items-center justify-center gap-2 py-2.5 text-sm text-muted-foreground hover:text-destructive transition-colors border border-dashed border-muted-foreground/20 hover:border-destructive/30 rounded-xl"
+        >
+          <XCircle className="h-4 w-4" />
+          Cancel this booking
+        </button>
+      )}
+
       {/* ── REVIEW SECTION ── */}
       {isCompleted && !reviewSubmitted && (
         <Card>
@@ -452,16 +519,8 @@ export default function BookingConfirmation() {
           <CardContent className="space-y-4">
             <div className="flex gap-2 justify-center">
               {[1, 2, 3, 4, 5].map((star) => (
-                <button
-                  key={star}
-                  type="button"
-                  onClick={() => setReviewRating(star)}
-                  data-testid={`star-${star}`}
-                  className="transition-transform hover:scale-110"
-                >
-                  <Star
-                    className={`h-8 w-8 transition-colors ${star <= reviewRating ? "fill-amber-400 text-amber-400" : "text-muted-foreground/40 hover:text-amber-200"}`}
-                  />
+                <button key={star} type="button" onClick={() => setReviewRating(star)} data-testid={`star-${star}`} className="transition-transform hover:scale-110">
+                  <Star className={`h-8 w-8 transition-colors ${star <= reviewRating ? "fill-amber-400 text-amber-400" : "text-muted-foreground/40 hover:text-amber-200"}`} />
                 </button>
               ))}
             </div>
@@ -475,12 +534,7 @@ export default function BookingConfirmation() {
               rows={3}
               data-testid="input-review"
             />
-            <Button
-              className="w-full"
-              onClick={handleReview}
-              disabled={createReview.isPending}
-              data-testid="button-submit-review"
-            >
+            <Button className="w-full" onClick={handleReview} disabled={createReview.isPending} data-testid="button-submit-review">
               {createReview.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Submit Review
             </Button>

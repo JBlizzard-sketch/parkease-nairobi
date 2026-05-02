@@ -1,10 +1,14 @@
-import { useGetZoneSummary } from "@workspace/api-client-react";
+import { useGetZoneSummary, useGetMapSpots } from "@workspace/api-client-react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Search, MapPin, Zap, ShieldCheck, Clock, CreditCard, Star, TrendingUp, ChevronRight, Car, Users, CheckCircle2 } from "lucide-react";
+import {
+  Search, MapPin, Zap, ShieldCheck, Clock, CreditCard, Star,
+  TrendingUp, ChevronRight, Car, Users, CheckCircle2, Heart,
+} from "lucide-react";
 import { useState } from "react";
+import { useFavorites } from "@/hooks/use-favorites";
 
 const ZONE_ICONS: Record<string, string> = {
   Westlands: "🏙️", CBD: "🏢", Upperhill: "🏥", Kilimani: "🌿",
@@ -32,17 +36,31 @@ const RECENT_ACTIVITY = [
   { name: "Wanjiku N.", action: "booked", zone: "Karen", ago: "15 min ago" },
 ];
 
+const AVATAR_COLORS = [
+  "from-emerald-400 to-emerald-600", "from-blue-400 to-blue-600",
+  "from-violet-400 to-violet-600", "from-amber-400 to-amber-600",
+  "from-pink-400 to-pink-600", "from-cyan-400 to-cyan-600",
+];
+
 export default function Home() {
   const { data: zoneSummary, isLoading } = useGetZoneSummary();
+  const { data: mapData } = useGetMapSpots({ lat: -1.2921, lng: 36.8219, radiusKm: 20 });
   const [searchQuery, setSearchQuery] = useState("");
   const [, setLocation] = useLocation();
+  const { isFavorite, toggle: toggleFavorite } = useFavorites();
 
-  const totalSpots = zoneSummary?.zones.reduce((s, z) => s + z.totalSpots, 0) ?? 0;
+  const totalSpots     = zoneSummary?.zones.reduce((s, z) => s + z.totalSpots, 0) ?? 0;
   const totalAvailable = zoneSummary?.zones.reduce((s, z) => s + z.availableSpots, 0) ?? 0;
-  const surgeZones = zoneSummary?.zones.filter((z) => z.surgeMultiplier > 1).length ?? 0;
-  const avgPrice = zoneSummary?.zones.length
+  const surgeZones     = zoneSummary?.zones.filter((z) => z.surgeMultiplier > 1).length ?? 0;
+  const avgPrice       = zoneSummary?.zones.length
     ? Math.round(zoneSummary.zones.reduce((s, z) => s + z.avgPricePerHour, 0) / zoneSummary.zones.length)
     : 160;
+
+  // Top-rated spots from the live API
+  const topSpots = (mapData?.spots ?? [])
+    .filter((s) => s.rating != null)
+    .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0))
+    .slice(0, 6);
 
   const TRUST_STATS = [
     { value: totalSpots > 0 ? `${totalSpots}` : "35+", label: "Listed Spots", icon: <MapPin className="h-4 w-4" /> },
@@ -54,11 +72,7 @@ export default function Home() {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = searchQuery.trim();
-    if (trimmed) {
-      setLocation(`/map?zone=${encodeURIComponent(trimmed)}`);
-    } else {
-      setLocation("/map");
-    }
+    setLocation(trimmed ? `/map?zone=${encodeURIComponent(trimmed)}` : "/map");
   };
 
   return (
@@ -68,7 +82,6 @@ export default function Home() {
         <div className="absolute inset-0" style={{
           backgroundImage: "radial-gradient(circle at 10% 20%, rgba(255,255,255,0.08) 0%, transparent 50%), radial-gradient(circle at 90% 80%, rgba(255,255,255,0.05) 0%, transparent 50%)",
         }} />
-        {/* Floating spots decorations */}
         <div className="absolute top-10 right-10 opacity-10 text-6xl select-none">🚗</div>
         <div className="absolute bottom-10 left-8 opacity-10 text-4xl select-none">🅿️</div>
 
@@ -99,20 +112,14 @@ export default function Home() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
-            <Button
-              type="submit"
-              size="lg"
-              className="absolute right-2 rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/90 h-10 px-6 font-bold"
-            >
+            <Button type="submit" size="lg" className="absolute right-2 rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/90 h-10 px-6 font-bold">
               <Search className="h-4 w-4 mr-1.5" /> Search
             </Button>
           </form>
 
           <div className="flex flex-wrap justify-center gap-2 mt-2 text-sm">
             {["Westlands", "CBD", "Kilimani", "Karen", "Parklands", "Upperhill"].map((z) => (
-              <button
-                key={z}
-                onClick={() => setLocation(`/map?zone=${z}`)}
+              <button key={z} onClick={() => setLocation(`/map?zone=${z}`)}
                 className="bg-white/10 hover:bg-white/20 px-3 py-1 rounded-full transition-colors text-white/90 hover:text-white"
               >
                 {ZONE_ICONS[z]} {z}
@@ -175,13 +182,10 @@ export default function Home() {
                             </span>
                           )}
                         </div>
-
                         <div className="flex items-center justify-between text-xs text-muted-foreground mb-1.5">
                           <span className="font-semibold text-foreground">{zone.availableSpots}/{zone.totalSpots}</span>
                           <span>KES {zone.avgPricePerHour}/hr</span>
                         </div>
-
-                        {/* Occupancy bar */}
                         <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                           <div
                             className={`h-full rounded-full transition-all ${occupancy > 80 ? "bg-red-500" : occupancy > 50 ? "bg-amber-500" : "bg-primary"}`}
@@ -191,7 +195,6 @@ export default function Home() {
                         <p className="text-[10px] text-muted-foreground mt-1">
                           {occupancy > 80 ? "Almost full" : occupancy > 50 ? "Filling up" : "Available"}
                         </p>
-
                         {zone.waitlistCount > 0 && (
                           <p className="text-[10px] text-amber-600 flex items-center gap-0.5 mt-1">
                             <Users className="h-2.5 w-2.5" /> {zone.waitlistCount} waiting
@@ -213,8 +216,86 @@ export default function Home() {
         </div>
       </section>
 
+      {/* ── Top Rated Spots ── */}
+      {topSpots.length > 0 && (
+        <section className="py-12 px-4 bg-card border-y border-border">
+          <div className="container mx-auto max-w-5xl">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-2xl font-bold">Top Rated Spots</h2>
+                <p className="text-muted-foreground text-sm mt-1">Highest-rated spaces across Nairobi</p>
+              </div>
+              <Button variant="outline" asChild className="gap-1.5 hidden sm:flex">
+                <Link href="/map">All Spots <ChevronRight className="h-4 w-4" /></Link>
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {topSpots.map((spot, i) => (
+                <Card key={spot.id} className="hover:shadow-md hover:border-primary/40 transition-all group">
+                  <CardContent className="p-4">
+                    {/* Header */}
+                    <div className="flex items-start justify-between gap-2 mb-3">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${AVATAR_COLORS[i % AVATAR_COLORS.length]} flex items-center justify-center text-white font-bold text-xs flex-shrink-0`}>
+                          {i + 1}
+                        </div>
+                        <div className="min-w-0">
+                          <h3 className="font-semibold text-sm leading-tight line-clamp-1">{spot.title}</h3>
+                          <p className="text-xs text-muted-foreground">{spot.zone}</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); toggleFavorite(spot.id); }}
+                        className="flex-shrink-0 p-0.5"
+                      >
+                        <Heart className={`h-4 w-4 transition-colors ${isFavorite(spot.id) ? "fill-red-500 text-red-500" : "text-muted-foreground/30 hover:text-red-400"}`} />
+                      </button>
+                    </div>
+
+                    {/* Rating + price */}
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: 5 }).map((_, s) => (
+                          <Star key={s} className={`h-3.5 w-3.5 ${s < Math.round(spot.rating ?? 0) ? "fill-amber-400 text-amber-400" : "text-muted-foreground/20"}`} />
+                        ))}
+                        <span className="text-xs font-semibold text-amber-600 ml-1">{spot.rating?.toFixed(1)}</span>
+                      </div>
+                      <span className="font-bold text-sm text-primary">KES {spot.pricePerHour}/hr</span>
+                    </div>
+
+                    {/* Badges */}
+                    <div className="flex flex-wrap gap-1 mb-3">
+                      {spot.hasCctv && (
+                        <span className="inline-flex items-center gap-0.5 text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded-full">
+                          <ShieldCheck className="h-3 w-3" />CCTV
+                        </span>
+                      )}
+                      {spot.surgeMultiplier > 1 && (
+                        <span className="inline-flex items-center gap-0.5 text-xs bg-red-50 text-red-700 border border-red-200 px-1.5 py-0.5 rounded-full">
+                          <Zap className="h-3 w-3" />Surge
+                        </span>
+                      )}
+                      <span className="text-xs bg-primary/5 text-primary border border-primary/20 px-1.5 py-0.5 rounded-full">
+                        {spot.isAvailable ? "Available" : "Booked"}
+                      </span>
+                    </div>
+
+                    <Link href={`/spots/${spot.id}`}>
+                      <Button size="sm" className="w-full h-8 text-xs gap-1.5 group-hover:bg-primary">
+                        View &amp; Book
+                      </Button>
+                    </Link>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* ── How It Works ── */}
-      <section className="py-14 px-4 bg-card border-y border-border">
+      <section className="py-14 px-4 bg-background border-b border-border">
         <div className="container mx-auto max-w-4xl">
           <div className="text-center mb-10">
             <h2 className="text-2xl font-bold">How ParkEase Works</h2>
@@ -252,7 +333,7 @@ export default function Home() {
           <div className="flex flex-col sm:flex-row gap-3 overflow-x-auto pb-1">
             {RECENT_ACTIVITY.map((item, i) => (
               <div key={i} className="flex items-center gap-2.5 bg-card rounded-xl px-3.5 py-2.5 border border-border flex-shrink-0 min-w-fit">
-                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs flex-shrink-0">
+                <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${AVATAR_COLORS[i % AVATAR_COLORS.length]} flex items-center justify-center font-bold text-white text-xs flex-shrink-0`}>
                   {item.name[0]}
                 </div>
                 <div>
