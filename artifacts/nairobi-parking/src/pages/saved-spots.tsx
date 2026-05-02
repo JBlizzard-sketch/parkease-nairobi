@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Link, useLocation } from "wouter";
 import {
   Heart, MapPin, Star, Shield, Zap, ArrowRight,
-  Map, SortAsc, BookOpen, Bookmark, Loader2,
+  Map, SortAsc, BookOpen, Bookmark, Loader2, TrendingDown, TrendingUp, CheckCircle2,
 } from "lucide-react";
 
 type SortKey = "default" | "price_asc" | "price_desc" | "rating";
@@ -153,6 +153,64 @@ export default function SavedSpots() {
         </div>
       ) : (
         <>
+          {/* Price comparison summary */}
+          {savedSpots.length >= 2 && (() => {
+            const maxPrice = Math.max(...savedSpots.map((s) => s.pricePerHour));
+            const minPrice = Math.min(...savedSpots.map((s) => s.pricePerHour));
+            const availableCount = savedSpots.filter((s) => s.isAvailable).length;
+            const cheapest = savedSpots.reduce((a, b) => a.pricePerHour <= b.pricePerHour ? a : b);
+            const priciest = savedSpots.reduce((a, b) => a.pricePerHour >= b.pricePerHour ? a : b);
+            return (
+              <Card className="border-border/50 bg-muted/20">
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-4 flex-wrap">
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-1.5 text-sm">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                        <span className="font-semibold">{availableCount}</span>
+                        <span className="text-muted-foreground">/ {savedSpots.length} available now</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 text-xs flex-wrap">
+                      <span className="flex items-center gap-1 text-emerald-600 font-medium">
+                        <TrendingDown className="h-3.5 w-3.5" />
+                        Cheapest: <span className="font-bold">KES {minPrice}/hr</span>
+                      </span>
+                      <span className="text-muted-foreground/40">·</span>
+                      <span className="flex items-center gap-1 text-muted-foreground">
+                        <TrendingUp className="h-3.5 w-3.5" />
+                        Priciest: <span className="font-medium">KES {maxPrice}/hr</span>
+                      </span>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    {[...savedSpots]
+                      .sort((a, b) => a.pricePerHour - b.pricePerHour)
+                      .map((spot) => {
+                        const pct = maxPrice > 0 ? Math.max(8, Math.round((spot.pricePerHour / maxPrice) * 100)) : 8;
+                        const isCheapest = spot.id === cheapest.id;
+                        return (
+                          <div key={spot.id} className="flex items-center gap-2">
+                            <p className="text-xs text-muted-foreground w-28 truncate flex-shrink-0">{spot.title}</p>
+                            <div className="flex-1 h-4 bg-muted rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all ${isCheapest ? "bg-emerald-500" : "bg-primary/60"}`}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                            <span className={`text-xs font-bold w-20 text-right flex-shrink-0 ${isCheapest ? "text-emerald-600" : "text-foreground"}`}>
+                              KES {spot.pricePerHour}/hr
+                              {isCheapest && <span className="ml-1 text-[9px] bg-emerald-100 text-emerald-700 px-1 py-0.5 rounded-full">Best</span>}
+                            </span>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
+
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground flex-shrink-0">
               <SortAsc className="h-3.5 w-3.5" />

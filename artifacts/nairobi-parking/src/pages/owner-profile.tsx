@@ -1,11 +1,64 @@
 import { useParams, Link } from "wouter";
-import { useListSpots, getListSpotsQueryKey } from "@workspace/api-client-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { useListSpots, useListReviews, getListSpotsQueryKey, getListReviewsQueryKey } from "@workspace/api-client-react";
+import type { Review } from "@workspace/api-client-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Star, MapPin, Car, ShieldCheck, ArrowLeft, Users, TrendingUp } from "lucide-react";
+import { Star, MapPin, Car, ShieldCheck, ArrowLeft, Users, TrendingUp, MessageSquare, Quote } from "lucide-react";
 import { useFavorites } from "@/hooks/use-favorites";
 import { Heart } from "lucide-react";
+
+const REVIEWER_GRADS = [
+  "from-sky-400 to-sky-600", "from-rose-400 to-rose-600",
+  "from-violet-400 to-violet-600", "from-amber-400 to-amber-600",
+  "from-teal-400 to-teal-600", "from-fuchsia-400 to-fuchsia-600",
+];
+
+function ReviewCard({ review, spotTitle }: { review: Review; spotTitle: string }) {
+  const grad = REVIEWER_GRADS[review.reviewerId % REVIEWER_GRADS.length];
+  const initial = review.reviewerName?.[0]?.toUpperCase() ?? "?";
+  const dateStr = review.createdAt ? new Date(review.createdAt).toLocaleDateString("en-KE", { day: "numeric", month: "short", year: "numeric" }) : "";
+  return (
+    <div className="flex gap-3 p-4 rounded-xl bg-muted/30 border border-border/40 hover:bg-muted/50 transition-colors">
+      <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${grad} flex items-center justify-center text-white font-bold text-sm flex-shrink-0`}>
+        {initial}
+      </div>
+      <div className="flex-1 min-w-0 space-y-1">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-sm font-semibold">{review.reviewerName}</p>
+          <div className="flex items-center gap-0.5 flex-shrink-0">
+            {[1, 2, 3, 4, 5].map((s) => (
+              <Star key={s} className={`h-3 w-3 ${s <= review.rating ? "fill-amber-400 text-amber-400" : "text-muted-foreground/20"}`} />
+            ))}
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">{spotTitle} · {dateStr}</p>
+        {review.comment && (
+          <p className="text-sm text-foreground/80 leading-relaxed mt-1 italic">
+            <Quote className="h-3 w-3 inline-block mr-0.5 text-muted-foreground/50 -mt-0.5" />
+            {review.comment}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SpotReviews({ spotId, spotTitle }: { spotId: number; spotTitle: string }) {
+  const { data } = useListReviews(
+    { spotId },
+    { query: { queryKey: getListReviewsQueryKey({ spotId }) } }
+  );
+  const reviews = data?.reviews ?? [];
+  if (!reviews.length) return null;
+  return (
+    <>
+      {reviews.map((r) => (
+        <ReviewCard key={r.id} review={r} spotTitle={spotTitle} />
+      ))}
+    </>
+  );
+}
 
 const AVATAR_GRADS = [
   "from-emerald-400 to-emerald-600",
@@ -160,6 +213,29 @@ export default function OwnerProfile() {
           </span>
         )}
       </div>
+
+      {/* Reviews section */}
+      {(() => {
+        const reviewedSpots = spots.filter((s) => s.reviewCount > 0);
+        const totalReviews = spots.reduce((acc, s) => acc + s.reviewCount, 0);
+        if (totalReviews === 0) return null;
+        return (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <MessageSquare className="h-4 w-4 text-primary" />
+                What commuters say
+                <Badge variant="outline" className="ml-auto text-xs">{totalReviews} review{totalReviews !== 1 ? "s" : ""}</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {reviewedSpots.map((s) => (
+                <SpotReviews key={s.id} spotId={s.id} spotTitle={s.title} />
+              ))}
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {/* Listings */}
       <div>
