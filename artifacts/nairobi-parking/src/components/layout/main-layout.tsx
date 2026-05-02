@@ -1,5 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { DemoSwitcher } from "@/components/demo-switcher";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useGetMe, getGetMeQueryKey, useListBookings } from "@workspace/api-client-react";
@@ -335,6 +336,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
       <main className="flex-1 flex flex-col">
         {children}
       </main>
+      <DemoSwitcher />
     </div>
   );
 }
