@@ -74,6 +74,9 @@ export default function MapExplorer() {
   const [searchText, setSearchText] = useState("");
   const [userCenter, setUserCenter] = useState<[number, number] | null>(null);
   const [locating, setLocating] = useState(false);
+  const [geocodeCenter, setGeocodeCenter] = useState<[number, number] | null>(null);
+  const [geocodeLabel, setGeocodeLabel] = useState<string | null>(null);
+  const [geocoding, setGeocoding] = useState(false);
 
   const defaultLat = -1.2921;
   const defaultLng = 36.8219;
@@ -109,7 +112,8 @@ export default function MapExplorer() {
 
   const mapCenter = ZONE_CENTERS[filterZone] ?? [defaultLat, defaultLng];
   const mapZoom = filterZone === "All" ? 12 : 14;
-  const effectiveCenter: [number, number] = userCenter ?? (mapCenter as [number, number]);
+  const effectiveCenter: [number, number] = userCenter ?? geocodeCenter ?? (mapCenter as [number, number]);
+  const effectiveZoom = userCenter ? 15 : geocodeCenter ? 15 : mapZoom;
 
   const activeFilterCount = [
     filterZone !== "All", filterMaxPrice < 500,
@@ -119,6 +123,37 @@ export default function MapExplorer() {
   const clearFilters = () => {
     setFilterZone("All"); setFilterMaxPrice(500);
     setFilterCctv(false); setFilterSurge(false); setFilterMinRating(0);
+  };
+
+  const clearGeocode = () => { setGeocodeCenter(null); setGeocodeLabel(null); };
+
+  const handleGeocode = async () => {
+    const q = searchText.trim();
+    if (!q) return;
+    const matchedZone = ZONES.find((z) => z !== "All" && z.toLowerCase() === q.toLowerCase());
+    if (matchedZone) { setFilterZone(matchedZone); setSearchText(""); return; }
+    setGeocoding(true);
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q + ", Nairobi, Kenya")}&format=json&limit=1`
+      );
+      const results: Array<{ lat: string; lon: string; display_name: string }> = await res.json();
+      if (results.length > 0) {
+        const { lat, lon, display_name } = results[0];
+        const shortName = display_name.split(",")[0].trim();
+        setGeocodeCenter([parseFloat(lat), parseFloat(lon)]);
+        setGeocodeLabel(shortName);
+        setUserCenter(null);
+        setSearchText("");
+        toast({ title: `Showing parking near ${shortName}` });
+      } else {
+        toast({ title: "Location not found", description: "Try a landmark or area name in Nairobi", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Search failed", description: "Check your connection and try again", variant: "destructive" });
+    } finally {
+      setGeocoding(false);
+    }
   };
 
   const handleLocate = () => {
@@ -272,7 +307,7 @@ export default function MapExplorer() {
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
-      <MapUpdater lat={effectiveCenter[0]} lng={effectiveCenter[1]} zoom={userCenter ? 14 : mapZoom} />
+      <MapUpdater lat={effectiveCenter[0]} lng={effectiveCenter[1]} zoom={effectiveZoom} />
       {filteredSpots.map((spot) => (
         <Marker
           key={spot.id}
@@ -343,12 +378,16 @@ export default function MapExplorer() {
           <div className="p-3 border-b border-border space-y-2 flex-shrink-0">
             <div className="flex gap-2">
               <div className="relative flex-1">
-                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                {geocoding
+                  ? <span className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  : <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                }
                 <Input
                   className="pl-9 h-9 text-sm"
-                  placeholder="Search spots or zones..."
+                  placeholder="Spot name, zone, or landmark…"
                   value={searchText}
                   onChange={(e) => setSearchText(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleGeocode(); if (e.key === "Escape") { setSearchText(""); clearGeocode(); } }}
                 />
               </div>
               <Button
@@ -380,6 +419,21 @@ export default function MapExplorer() {
                 </SheetContent>
               </Sheet>
             </div>
+
+            {/* Geocode badge */}
+            {geocodeLabel && (
+              <div className="flex items-center gap-1.5">
+                <span className="inline-flex items-center gap-1 text-xs bg-primary/10 text-primary border border-primary/20 px-2.5 py-1 rounded-full font-medium">
+                  <MapPin className="h-3 w-3 flex-shrink-0" />
+                  Near {geocodeLabel}
+                  <button
+                    onClick={clearGeocode}
+                    className="ml-0.5 hover:opacity-60 text-base leading-none font-bold"
+                    aria-label="Clear location search"
+                  >×</button>
+                </span>
+              </div>
+            )}
 
             {/* Sort + count row */}
             <div className="flex items-center justify-between gap-2">
