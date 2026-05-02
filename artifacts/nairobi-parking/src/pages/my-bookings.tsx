@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useListBookings, useUpdateBookingStatus, getListBookingsQueryKey } from "@workspace/api-client-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useQueryClient } from "@tanstack/react-query";
@@ -14,8 +14,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Link } from "wouter";
 import {
-  Calendar, Clock, MapPin, ArrowRight, Car, CreditCard,
-  CheckCircle2, AlertCircle, Star, TrendingUp, XCircle, Loader2, Navigation,
+  Calendar, CalendarDays, ChevronLeft, ChevronRight, Clock, MapPin,
+  ArrowRight, Car, CreditCard, CheckCircle2, AlertCircle, Star,
+  TrendingUp, XCircle, Loader2, Navigation,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -47,6 +48,8 @@ export default function MyBookings() {
   const { toast } = useToast();
   const [cancelTarget, setCancelTarget] = useState<{ id: number; title: string } | null>(null);
   const [cancellingId, setCancellingId] = useState<number | null>(null);
+  const [calMonth, setCalMonth] = useState(() => new Date());
+  const [calSelected, setCalSelected] = useState<string | null>(null);
 
   const { data: confirmedData, isLoading: confirmedLoading } = useListBookings(
     { userId: userId ?? undefined, role: "commuter", status: "confirmed", limit: 20 },
@@ -104,6 +107,18 @@ export default function MyBookings() {
   const past      = pastData?.bookings ?? [];
   const cancelled = cancelledData?.bookings ?? [];
   const activeList = [...pending, ...confirmed];
+
+  const allBookingsForCal = useMemo(
+    () => [...pending, ...confirmed, ...past, ...cancelled],
+    [pending, confirmed, past, cancelled]
+  );
+  const bookingsByDate = useMemo(() => {
+    const map = new Map<string, typeof allBookingsForCal>();
+    allBookingsForCal.forEach((b) => {
+      map.set(b.date, [...(map.get(b.date) ?? []), b]);
+    });
+    return map;
+  }, [allBookingsForCal]);
 
   const totalSpent  = past.reduce((s, b) => s + b.totalAmount, 0);
   const hoursParked = past.reduce((s, b) => s + b.totalHours, 0);
@@ -335,7 +350,7 @@ export default function MyBookings() {
       )}
 
       <Tabs defaultValue="upcoming">
-        <TabsList className="w-full grid grid-cols-3">
+        <TabsList className="w-full grid grid-cols-4">
           <TabsTrigger value="upcoming">
             Active
             {activeList.length > 0 && (
@@ -353,6 +368,10 @@ export default function MyBookings() {
             {cancelled.length > 0 && (
               <span className="ml-1.5 bg-muted text-muted-foreground text-xs rounded-full px-1.5 py-0.5 leading-none">{cancelled.length}</span>
             )}
+          </TabsTrigger>
+          <TabsTrigger value="calendar" className="gap-1.5">
+            <CalendarDays className="h-3.5 w-3.5" />
+            <span>Cal</span>
           </TabsTrigger>
         </TabsList>
 
@@ -399,6 +418,152 @@ export default function MyBookings() {
               <p className="text-xs text-muted-foreground px-1">{cancelled.length} booking{cancelled.length > 1 ? "s" : ""} cancelled</p>
               {cancelled.map((b) => <BookingCard key={b.id} booking={b} />)}
             </>
+          )}
+        </TabsContent>
+        <TabsContent value="calendar" className="mt-4 space-y-4">
+          {/* Month navigation */}
+          <div className="flex items-center justify-between bg-card border border-border rounded-xl px-4 py-2.5">
+            <button
+              onClick={() => { setCalMonth((m) => new Date(m.getFullYear(), m.getMonth() - 1)); setCalSelected(null); }}
+              className="p-1.5 rounded-lg hover:bg-muted transition-colors"
+              aria-label="Previous month"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <span className="font-semibold text-sm">
+              {calMonth.toLocaleDateString("en-KE", { month: "long", year: "numeric" })}
+            </span>
+            <button
+              onClick={() => { setCalMonth((m) => new Date(m.getFullYear(), m.getMonth() + 1)); setCalSelected(null); }}
+              className="p-1.5 rounded-lg hover:bg-muted transition-colors"
+              aria-label="Next month"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Calendar grid */}
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            <div className="grid grid-cols-7 bg-muted/30 border-b border-border">
+              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+                <div key={d} className="text-center text-[11px] font-semibold text-muted-foreground py-2">
+                  {d}
+                </div>
+              ))}
+            </div>
+            {(() => {
+              const yr = calMonth.getFullYear();
+              const mo = calMonth.getMonth();
+              const firstDay = new Date(yr, mo, 1).getDay();
+              const daysInMo = new Date(yr, mo + 1, 0).getDate();
+              const todayStr = new Date().toISOString().split("T")[0];
+              const cells: React.ReactNode[] = [];
+
+              for (let i = 0; i < firstDay; i++) {
+                cells.push(
+                  <div key={`pre-${i}`} className="min-h-[60px] border-b border-r border-border/30 bg-muted/10 last:border-r-0" />
+                );
+              }
+
+              for (let day = 1; day <= daysInMo; day++) {
+                const dateStr = `${yr}-${String(mo + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                const dayBookings = bookingsByDate.get(dateStr) ?? [];
+                const isToday = dateStr === todayStr;
+                const isSelected = dateStr === calSelected;
+                const hasPending   = dayBookings.some((b) => b.status === "pending");
+                const hasConfirmed = dayBookings.some((b) => b.status === "confirmed");
+                const hasCompleted = dayBookings.some((b) => b.status === "completed");
+                const colIndex = (firstDay + day - 1) % 7;
+                const isLastCol = colIndex === 6;
+
+                cells.push(
+                  <button
+                    key={dateStr}
+                    onClick={() => dayBookings.length > 0 && setCalSelected(isSelected ? null : dateStr)}
+                    disabled={dayBookings.length === 0}
+                    className={cn(
+                      "min-h-[60px] p-1.5 border-b border-r border-border/30 text-left flex flex-col transition-colors",
+                      isLastCol && "border-r-0",
+                      dayBookings.length > 0 ? "hover:bg-primary/5 cursor-pointer" : "cursor-default",
+                      isSelected ? "bg-primary/10 ring-1 ring-inset ring-primary/30" : "",
+                      isToday && !isSelected ? "bg-amber-50/70" : "",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full mb-1 flex-shrink-0",
+                        isToday ? "bg-primary text-white" : "text-foreground",
+                        isSelected && !isToday ? "text-primary" : "",
+                        !isToday && !isSelected ? "text-muted-foreground" : "",
+                      )}
+                    >
+                      {day}
+                    </span>
+                    <div className="flex flex-wrap gap-0.5 items-center">
+                      {hasPending   && <span className="w-2 h-2 rounded-full bg-amber-500 flex-shrink-0" />}
+                      {hasConfirmed && <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />}
+                      {hasCompleted && <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />}
+                      {dayBookings.length > 1 && (
+                        <span className="text-[9px] font-bold text-muted-foreground/70 leading-none">{dayBookings.length}</span>
+                      )}
+                    </div>
+                  </button>
+                );
+              }
+
+              const trailing = (7 - ((firstDay + daysInMo) % 7)) % 7;
+              for (let i = 0; i < trailing; i++) {
+                cells.push(
+                  <div key={`post-${i}`} className="min-h-[60px] border-b border-r border-border/30 bg-muted/10 last:border-r-0" />
+                );
+              }
+
+              return <div className="grid grid-cols-7">{cells}</div>;
+            })()}
+          </div>
+
+          {/* Legend */}
+          <div className="flex items-center gap-5 text-xs text-muted-foreground px-1">
+            <span className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-amber-500 flex-shrink-0" />Pending
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />Confirmed
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />Completed
+            </span>
+          </div>
+
+          {/* Selected day detail */}
+          {calSelected && (bookingsByDate.get(calSelected)?.length ?? 0) > 0 && (
+            <div className="space-y-3 pt-2 border-t border-border">
+              <div className="flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-primary flex-shrink-0" />
+                <h3 className="font-semibold text-sm">
+                  {new Date(calSelected + "T12:00:00").toLocaleDateString("en-KE", {
+                    weekday: "long", day: "numeric", month: "long",
+                  })}
+                </h3>
+                <Badge variant="secondary" className="text-xs ml-auto">
+                  {bookingsByDate.get(calSelected)!.length} booking{bookingsByDate.get(calSelected)!.length > 1 ? "s" : ""}
+                </Badge>
+              </div>
+              {bookingsByDate.get(calSelected)!.map((b) => (
+                <BookingCard key={b.id} booking={b} showRateAction showCancel />
+              ))}
+            </div>
+          )}
+
+          {allBookingsForCal.length === 0 && (
+            <div className="text-center py-12 text-muted-foreground space-y-2">
+              <CalendarDays className="h-10 w-10 mx-auto opacity-20" />
+              <p className="font-medium text-base">No bookings yet</p>
+              <p className="text-xs">Make your first booking and it will appear on the calendar</p>
+              <Link href="/map">
+                <Button size="sm" className="mt-2">Browse Spots</Button>
+              </Link>
+            </div>
           )}
         </TabsContent>
       </Tabs>
