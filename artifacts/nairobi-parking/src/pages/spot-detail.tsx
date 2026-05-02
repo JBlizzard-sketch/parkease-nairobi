@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { MapPin, Shield, Clock, Star, Car, Zap, ArrowLeft, CalendarDays, Lock, Heart, ChevronLeft, ChevronRight, Images, Share2, CheckCircle2, Phone } from "lucide-react";
+import { MapPin, Shield, Clock, Star, Car, Zap, ArrowLeft, CalendarDays, Lock, Heart, ChevronLeft, ChevronRight, Images, Share2, CheckCircle2, Phone, XCircle } from "lucide-react";
 import { Link } from "wouter";
 import { MapContainer, TileLayer, Marker } from "react-leaflet";
 import L from "leaflet";
@@ -222,6 +222,17 @@ export default function SpotDetail() {
     userBookingsParams,
     { query: { enabled: !!userId, queryKey: getListBookingsQueryKey(userBookingsParams) } }
   );
+
+  const spotBookingsParams = { spotId: id, status: "confirmed" as const, limit: 100 };
+  const { data: spotBookings } = useListBookings(
+    spotBookingsParams,
+    { query: { enabled: !!id, queryKey: getListBookingsQueryKey(spotBookingsParams) } }
+  );
+
+  const conflictBooking = useMemo(() => {
+    const onDate = (spotBookings?.bookings ?? []).filter((b) => b.date === date);
+    return onDate.find((b) => b.startHour < endHour && b.endHour > startHour) ?? null;
+  }, [spotBookings, date, startHour, endHour]);
 
   const { addToRecent } = useRecentlyViewed();
   useEffect(() => {
@@ -758,6 +769,32 @@ export default function SpotDetail() {
                 </div>
               </div>
 
+              {/* Availability indicator */}
+              {hours > 0 && (
+                <div className={`flex items-center gap-2 text-xs px-3 py-2.5 rounded-lg border ${
+                  conflictBooking
+                    ? "bg-red-50 border-red-200 text-red-700"
+                    : "bg-emerald-50 border-emerald-200 text-emerald-700"
+                }`}>
+                  {conflictBooking ? (
+                    <>
+                      <XCircle className="h-4 w-4 flex-shrink-0" />
+                      <span>
+                        <span className="font-semibold">Slot taken:</span> someone has booked{" "}
+                        {fmtHour(conflictBooking.startHour)}–{fmtHour(conflictBooking.endHour)} on this date
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+                      <span>
+                        <span className="font-semibold">Available</span> — {fmtHour(startHour)} to {fmtHour(endHour)} on {new Date(date + "T00:00:00").toLocaleDateString("en-KE", { weekday: "short", day: "numeric", month: "short" })}
+                      </span>
+                    </>
+                  )}
+                </div>
+              )}
+
               {hours > 0 ? (
                 <div className="rounded-xl bg-muted/50 border border-border p-3 space-y-2 text-sm">
                   <div className="flex justify-between">
@@ -783,7 +820,7 @@ export default function SpotDetail() {
 
               <Button
                 className="w-full h-11 text-base font-semibold"
-                disabled={hours <= 0 || createBooking.isPending}
+                disabled={hours <= 0 || !!conflictBooking || createBooking.isPending}
                 onClick={handleBook}
                 data-testid="button-book"
               >

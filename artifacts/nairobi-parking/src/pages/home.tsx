@@ -45,6 +45,92 @@ const AVATAR_COLORS = [
   "from-pink-400 to-pink-600", "from-cyan-400 to-cyan-600",
 ];
 
+type ZoneItem = { zone: string; avgPricePerHour: number };
+
+function EarningsCalculator({ zones }: { zones: ZoneItem[] }) {
+  const [calcZone, setCalcZone] = useState<string>("");
+  const [calcHours, setCalcHours] = useState(6);
+  const [calcDays, setCalcDays] = useState(5);
+
+  const effectiveZone = calcZone || (zones[0]?.zone ?? "");
+  const selectedZone = zones.find((z) => z.zone === effectiveZone) ?? zones[0];
+  const avgPrice = selectedZone?.avgPricePerHour ?? 200;
+  const monthly = Math.round(avgPrice * calcHours * calcDays * 4.33 * 0.85);
+  const weekly = Math.round(avgPrice * calcHours * calcDays * 0.85);
+
+  if (!zones.length) return null;
+
+  return (
+    <div className="mt-8 border-t border-primary/20 pt-6 space-y-4">
+      <div>
+        <h3 className="font-bold text-lg flex items-center gap-2">
+          <TrendingUp className="h-5 w-5 text-primary" />
+          Earnings Calculator
+        </h3>
+        <p className="text-sm text-muted-foreground mt-0.5">See what your space could earn — adjust the sliders</p>
+      </div>
+
+      <div className="grid sm:grid-cols-3 gap-4">
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Zone</label>
+          <select
+            value={effectiveZone}
+            onChange={(e) => setCalcZone(e.target.value)}
+            className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            {zones.map((z) => (
+              <option key={z.zone} value={z.zone}>
+                {z.zone} — KES {z.avgPricePerHour}/hr avg
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            Hours / day: <span className="text-foreground">{calcHours}h</span>
+          </label>
+          <input
+            type="range" min={1} max={12} value={calcHours}
+            onChange={(e) => setCalcHours(Number(e.target.value))}
+            className="w-full accent-primary mt-2"
+          />
+          <div className="flex justify-between text-[10px] text-muted-foreground/60">
+            <span>1h</span><span>6h</span><span>12h</span>
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            Days / week: <span className="text-foreground">{calcDays}d</span>
+          </label>
+          <input
+            type="range" min={1} max={7} value={calcDays}
+            onChange={(e) => setCalcDays(Number(e.target.value))}
+            className="w-full accent-primary mt-2"
+          />
+          <div className="flex justify-between text-[10px] text-muted-foreground/60">
+            <span>1d</span><span>4d</span><span>7d</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 bg-primary/10 border border-primary/20 rounded-xl px-5 py-4">
+        <div>
+          <p className="text-xs text-muted-foreground mb-0.5">Estimated take-home earnings</p>
+          <p className="text-3xl font-bold text-primary">
+            KES {monthly.toLocaleString()}
+            <span className="text-base font-normal text-muted-foreground"> / month</span>
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">≈ KES {weekly.toLocaleString()} / week</p>
+        </div>
+        <div className="sm:ml-auto text-xs text-muted-foreground space-y-0.5">
+          <p>KES {avgPrice}/hr × {calcHours}h × {calcDays}d/wk × 4.3 wks</p>
+          <p className="text-primary font-semibold">After 15% ParkEase platform fee</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const fmtHour = (h: number) => `${h % 12 || 12}:00 ${h < 12 ? "AM" : "PM"}`;
 
 export default function Home() {
@@ -522,6 +608,9 @@ export default function Home() {
                 <p className="text-xs text-muted-foreground">Free to list · No monthly fees</p>
               </div>
             </div>
+
+            {/* Earnings Calculator */}
+            <EarningsCalculator zones={zoneSummary?.zones ?? []} />
           </div>
         </div>
       </section>
