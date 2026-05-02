@@ -7,11 +7,12 @@ import { Input } from "@/components/ui/input";
 import {
   Search, MapPin, Zap, ShieldCheck, Clock, CreditCard, Star,
   TrendingUp, ChevronRight, Car, Users, CheckCircle2, Heart,
-  Navigation, Calendar, ArrowRight,
+  Navigation, Calendar, ArrowRight, History, X,
 } from "lucide-react";
 import { useState, useMemo } from "react";
 import { useFavorites } from "@/hooks/use-favorites";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { useRecentlyViewed } from "@/hooks/use-recently-viewed";
 
 const ZONE_ICONS: Record<string, string> = {
   Westlands: "🏙️", CBD: "🏢", Upperhill: "🏥", Kilimani: "🌿",
@@ -141,6 +142,7 @@ export default function Home() {
   const [, setLocation] = useLocation();
   const { isFavorite, toggle: toggleFavorite } = useFavorites();
   const { userId } = useCurrentUser();
+  const { recentIds, clearRecent } = useRecentlyViewed();
 
   const { data: bookingsData } = useListBookings(
     { userId: userId ?? 0 },
@@ -373,6 +375,66 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {/* ── Continue Browsing ── */}
+      {recentIds.length > 0 && (
+        <section className="py-8 px-4 bg-background border-b border-border">
+          <div className="container mx-auto max-w-5xl">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <History className="h-4 w-4 text-muted-foreground" />
+                <h2 className="font-bold text-base">Continue Browsing</h2>
+                <span className="text-xs text-muted-foreground">({recentIds.length} recently viewed)</span>
+              </div>
+              <button
+                onClick={clearRecent}
+                className="text-xs text-muted-foreground hover:text-destructive transition-colors flex items-center gap-1"
+              >
+                <X className="h-3 w-3" /> Clear
+              </button>
+            </div>
+            <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
+              {recentIds.slice(0, 6).map((spotId) => {
+                const spot = mapData?.spots.find((s) => s.id === spotId);
+                if (!spot) return null;
+                return (
+                  <Link key={spotId} href={`/spots/${spot.id}`}>
+                    <Card className="flex-shrink-0 w-52 hover:border-primary/50 hover:shadow-sm transition-all cursor-pointer group">
+                      <CardContent className="p-3 space-y-2">
+                        <div className="flex items-start justify-between gap-1">
+                          <h3 className="font-semibold text-xs leading-tight line-clamp-2 flex-1 group-hover:text-primary transition-colors">
+                            {spot.title}
+                          </h3>
+                          {spot.rating && (
+                            <span className="flex items-center gap-0.5 text-amber-500 flex-shrink-0 text-[10px] font-bold">
+                              <Star className="h-2.5 w-2.5 fill-current" />{spot.rating.toFixed(1)}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                          <MapPin className="h-2.5 w-2.5 flex-shrink-0" />
+                          <span className="truncate">{spot.zone}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-xs text-primary">KES {spot.pricePerHour}/hr</span>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${spot.isAvailable ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600"}`}>
+                            {spot.isAvailable ? "Free" : "Booked"}
+                          </span>
+                        </div>
+                        {spot.surgeMultiplier > 1 && (
+                          <span className="inline-flex items-center gap-0.5 text-[10px] bg-red-50 text-red-700 border border-red-200 px-1.5 py-0.5 rounded-full">
+                            <Zap className="h-2.5 w-2.5" /> Surge ×{spot.surgeMultiplier}
+                          </span>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* ── Zones Grid ── */}
       <section className="py-14 px-4 bg-background">

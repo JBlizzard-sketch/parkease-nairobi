@@ -20,6 +20,11 @@ export default function OwnerDashboard() {
     { query: { enabled: !!userId, queryKey: getListBookingsQueryKey({ userId: userId ?? undefined, role: "owner", status: "pending", limit: 10 }) } }
   );
 
+  const { data: recentActivity } = useListBookings(
+    { userId: userId ?? undefined, role: "owner", limit: 8 },
+    { query: { enabled: !!userId, queryKey: getListBookingsQueryKey({ userId: userId ?? undefined, role: "owner", limit: 8 }) } }
+  );
+
   const pendingCount = pendingBookings?.total ?? 0;
 
   if (!userId) return <div className="p-8 text-center text-muted-foreground">Please login as owner.</div>;
@@ -239,6 +244,59 @@ export default function OwnerDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Recent Activity */}
+      {(recentActivity?.bookings ?? []).length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Activity className="h-4 w-4 text-blue-500" />
+                Recent Activity
+              </CardTitle>
+              <Link href="/owner/bookings" className="text-xs text-primary hover:underline">See all</Link>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-1 p-4 pt-0">
+            {(recentActivity?.bookings ?? []).slice(0, 6).map((b, i) => {
+              const STATUS_DOT: Record<string, string> = {
+                pending:   "bg-amber-500",
+                confirmed: "bg-emerald-500",
+                completed: "bg-blue-500",
+                cancelled: "bg-red-400",
+                no_show:   "bg-gray-400",
+              };
+              const STATUS_TEXT: Record<string, string> = {
+                pending:   "text-amber-700",
+                confirmed: "text-emerald-700",
+                completed: "text-blue-700",
+                cancelled: "text-red-600",
+                no_show:   "text-gray-600",
+              };
+              const dot = STATUS_DOT[b.status] ?? "bg-muted-foreground";
+              const txt = STATUS_TEXT[b.status] ?? "text-muted-foreground";
+              const fmtHour = (h: number) => `${h % 12 || 12}${h < 12 ? "am" : "pm"}`;
+              return (
+                <Link key={b.id} href={`/owner/bookings`}>
+                  <div className={`flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-muted/50 transition-colors ${i < (recentActivity?.bookings.length ?? 1) - 1 ? "" : ""}`}>
+                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dot}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate leading-tight">{b.spotTitle}</p>
+                      <p className="text-[11px] text-muted-foreground truncate">
+                        {b.commuterName ?? "Commuter"} · {b.date} · {fmtHour(b.startHour)}–{fmtHour(b.endHour)}
+                      </p>
+                    </div>
+                    <div className="text-right flex-shrink-0 space-y-0.5">
+                      <p className="text-xs font-bold">KES {b.totalAmount.toLocaleString()}</p>
+                      <p className={`text-[10px] font-medium capitalize ${txt}`}>{b.status.replace("_", " ")}</p>
+                    </div>
+                  </div>
+                </Link>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Quick Actions */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
