@@ -104,35 +104,27 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
             {isOwner && <NavLink href="/owner/dashboard" label="Owner" ownerStyle />}
             <NavLink href="/admin" label="Analytics" />
 
-            {/* Notification Bell — owners: pending requests; commuters: unpaid bookings */}
-            {isAuthenticated && isOwner && (
-              <Link href="/owner/bookings" className="relative">
+            {/* Notification Bell → /notifications hub */}
+            {isAuthenticated && (
+              <Link href="/notifications" className="relative">
                 <button
                   className={cn(
                     "relative p-1.5 rounded-lg transition-colors hover:bg-muted",
-                    location === "/owner/bookings" ? "text-primary bg-primary/5" : "text-muted-foreground"
+                    location === "/notifications" ? "text-primary bg-primary/5" : "text-muted-foreground"
                   )}
-                  title={pendingCount > 0 ? `${pendingCount} pending booking requests` : "Booking requests"}
+                  title="Notifications"
                 >
                   <Bell className="h-5 w-5" />
-                  {pendingCount > 0 && (
+                  {(isOwner && pendingCount > 0) && (
                     <span className="absolute -top-0.5 -right-0.5 bg-destructive text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-0.5 leading-none animate-pulse">
                       {pendingCount > 9 ? "9+" : pendingCount}
                     </span>
                   )}
-                </button>
-              </Link>
-            )}
-            {isAuthenticated && isCommuterOnly && commuterPendingCount > 0 && (
-              <Link href="/bookings" className="relative">
-                <button
-                  className="relative p-1.5 rounded-lg transition-colors hover:bg-muted text-muted-foreground"
-                  title={`${commuterPendingCount} booking${commuterPendingCount > 1 ? "s" : ""} awaiting payment`}
-                >
-                  <Bell className="h-5 w-5" />
-                  <span className="absolute -top-0.5 -right-0.5 bg-amber-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-0.5 leading-none animate-pulse">
-                    {commuterPendingCount > 9 ? "9+" : commuterPendingCount}
-                  </span>
+                  {(isCommuterOnly && commuterPendingCount > 0) && (
+                    <span className="absolute -top-0.5 -right-0.5 bg-amber-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-0.5 leading-none animate-pulse">
+                      {commuterPendingCount > 9 ? "9+" : commuterPendingCount}
+                    </span>
+                  )}
                 </button>
               </Link>
             )}
@@ -220,22 +212,19 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
 
           {/* Mobile: Bell + Toggle */}
           <div className="md:hidden flex items-center gap-1">
-            {isAuthenticated && isOwner && (
-              <Link href="/owner/bookings" className="relative p-2">
+            {isAuthenticated && (
+              <Link href="/notifications" className="relative p-2">
                 <Bell className="h-5 w-5 text-muted-foreground" />
-                {pendingCount > 0 && (
+                {isOwner && pendingCount > 0 && (
                   <span className="absolute top-1 right-1 bg-destructive text-white text-[9px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center leading-none">
                     {pendingCount > 9 ? "9+" : pendingCount}
                   </span>
                 )}
-              </Link>
-            )}
-            {isAuthenticated && isCommuterOnly && commuterPendingCount > 0 && (
-              <Link href="/bookings" className="relative p-2">
-                <Bell className="h-5 w-5 text-muted-foreground" />
-                <span className="absolute top-1 right-1 bg-amber-500 text-white text-[9px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center leading-none">
-                  {commuterPendingCount > 9 ? "9+" : commuterPendingCount}
-                </span>
+                {isCommuterOnly && commuterPendingCount > 0 && (
+                  <span className="absolute top-1 right-1 bg-amber-500 text-white text-[9px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center leading-none">
+                    {commuterPendingCount > 9 ? "9+" : commuterPendingCount}
+                  </span>
+                )}
               </Link>
             )}
             {isAuthenticated && me && userId && (
@@ -273,6 +262,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
               { href: "/map", label: "Find Parking", icon: <MapPin className="h-4 w-4" /> },
               { href: "/bookings", label: "My Bookings", icon: <Car className="h-4 w-4" /> },
               { href: "/waitlist", label: "Waitlist", icon: <Clock className="h-4 w-4" /> },
+              { href: "/notifications", label: "Notifications", icon: <Bell className="h-4 w-4" /> },
             ].map(({ href, label, icon }) => (
               <Link
                 key={href}

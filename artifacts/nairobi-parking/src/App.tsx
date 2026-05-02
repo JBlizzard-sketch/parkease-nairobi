@@ -14,6 +14,7 @@ import Waitlist from "@/pages/waitlist";
 import Login from "@/pages/login";
 
 import Profile from "@/pages/profile";
+import Notifications from "@/pages/notifications";
 import AdminAnalytics from "@/pages/admin";
 import OwnerDashboard from "@/pages/owner/dashboard";
 import OwnerSpots from "@/pages/owner/spots";
@@ -36,6 +37,7 @@ function Router() {
         <Route path="/waitlist" component={Waitlist} />
         <Route path="/login" component={Login} />
         <Route path="/profile" component={Profile} />
+        <Route path="/notifications" component={Notifications} />
         <Route path="/admin" component={AdminAnalytics} />
 
         <Route path="/owner/dashboard" component={OwnerDashboard} />
