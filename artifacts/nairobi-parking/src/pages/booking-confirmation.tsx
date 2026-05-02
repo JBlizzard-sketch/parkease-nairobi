@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useParams, useLocation } from "wouter";
-import { useGetBooking, useUpdateBookingStatus, useCreateReview, getGetBookingQueryKey } from "@workspace/api-client-react";
+import { useGetBooking, useUpdateBookingStatus, useCreateReview, useGetSpot, useListSpots, getGetBookingQueryKey, getGetSpotQueryKey, getListSpotsQueryKey } from "@workspace/api-client-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -213,6 +213,18 @@ export default function BookingConfirmation() {
   const { data: booking, isLoading } = useGetBooking(bookingId, {
     query: { enabled: !!bookingId, queryKey: getGetBookingQueryKey(bookingId) },
   });
+
+  const { data: spotData } = useGetSpot(booking?.spotId ?? 0, {
+    query: { enabled: !!booking?.spotId, queryKey: getGetSpotQueryKey(booking?.spotId ?? 0) },
+  });
+
+  const { data: similarData } = useListSpots(
+    { zone: spotData?.zone ?? "" },
+    { query: { enabled: !!spotData?.zone, queryKey: getListSpotsQueryKey({ zone: spotData?.zone ?? "" }) } }
+  );
+  const similarSpots = (similarData?.spots ?? [])
+    .filter((s) => s.id !== booking?.spotId && s.isActive)
+    .slice(0, 3);
 
   const updateStatus = useUpdateBookingStatus({
     mutation: {
@@ -837,6 +849,46 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
           </Button>
         </Link>
       </div>
+
+      {/* ── SIMILAR SPOTS ── */}
+      {(isConfirmed || isCompleted) && similarSpots.length > 0 && (
+        <div className="space-y-3 pt-2">
+          <div className="flex items-center gap-2">
+            <MapPin className="h-4 w-4 text-muted-foreground" />
+            <p className="text-sm font-semibold text-muted-foreground">
+              More spots in {spotData?.zone}
+            </p>
+          </div>
+          <div className="space-y-2">
+            {similarSpots.map((spot) => (
+              <Link key={spot.id} href={`/spots/${spot.id}`}>
+                <div className="flex items-center justify-between p-3.5 rounded-xl border border-border hover:border-primary/40 hover:bg-muted/30 transition-all cursor-pointer group">
+                  <div className="flex-1 min-w-0 space-y-0.5">
+                    <p className="font-semibold text-sm group-hover:text-primary transition-colors truncate">
+                      {spot.title}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
+                      <MapPin className="h-3 w-3 flex-shrink-0" />
+                      {spot.address}
+                    </p>
+                  </div>
+                  <div className="flex flex-col items-end gap-1 flex-shrink-0 ml-3">
+                    <span className="text-sm font-bold text-primary">
+                      KES {spot.pricePerHour}/hr
+                    </span>
+                    {spot.rating && (
+                      <span className="text-xs text-amber-500 flex items-center gap-0.5 font-semibold">
+                        <Star className="h-3 w-3 fill-current" />
+                        {spot.rating.toFixed(1)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

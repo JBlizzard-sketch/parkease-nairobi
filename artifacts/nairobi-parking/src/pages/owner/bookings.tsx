@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
-import { Calendar, Clock, User, Check, X, DollarSign, CheckCircle2, TrendingUp, Loader2, MessageSquare, Star } from "lucide-react";
+import { Calendar, Clock, User, Check, X, DollarSign, CheckCircle2, TrendingUp, Loader2, MessageSquare, Star, UserX } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -60,7 +60,7 @@ export default function OwnerBookings() {
       onSuccess: (_d, vars) => {
         queryClient.invalidateQueries({ queryKey: ["bookings"] });
         queryClient.invalidateQueries({ queryKey: qk() });
-        const action = vars.data.status === "confirmed" ? "confirmed" : vars.data.status === "cancelled" ? "declined" : "marked complete";
+        const action = vars.data.status === "confirmed" ? "confirmed" : vars.data.status === "cancelled" ? "declined" : vars.data.status === "no_show" ? "marked as no-show" : "marked complete";
         toast({ title: `Booking ${action}`, description: vars.data.status === "confirmed" ? "The commuter has been notified." : undefined });
         setUpdating(null);
       },
@@ -68,9 +68,9 @@ export default function OwnerBookings() {
     },
   });
 
-  const handleAction = (id: number, status: "confirmed" | "cancelled" | "completed") => {
+  const handleAction = (id: number, status: "confirmed" | "cancelled" | "completed" | "no_show") => {
     setUpdating(id);
-    updateStatus.mutate({ id, data: { status } });
+    updateStatus.mutate({ id, data: { status } } as any);
   };
 
   const handleRate = (bookingId: number, commuterId: number) => {
@@ -184,16 +184,29 @@ export default function OwnerBookings() {
                 </>
               )}
               {booking.status === "confirmed" && isPast && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="gap-1.5 border-blue-300 text-blue-700 hover:bg-blue-50"
-                  onClick={() => handleAction(booking.id, "completed")}
-                  disabled={isUpdating}
-                >
-                  {isUpdating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                  Mark Done
-                </Button>
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5 border-blue-300 text-blue-700 hover:bg-blue-50"
+                    onClick={() => handleAction(booking.id, "completed")}
+                    disabled={isUpdating}
+                  >
+                    {isUpdating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                    Mark Done
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5 border-gray-300 text-gray-600 hover:bg-gray-50"
+                    onClick={() => handleAction(booking.id, "no_show")}
+                    disabled={isUpdating}
+                    title="Commuter did not show up"
+                  >
+                    <UserX className="h-3.5 w-3.5" />
+                    No-show
+                  </Button>
+                </>
               )}
               {booking.status === "completed" && !ratedBookings.has(booking.id) && ratingOpen !== booking.id && (
                 <Button
