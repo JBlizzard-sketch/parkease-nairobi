@@ -102,6 +102,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
             <NavLink href="/map" label="Find Parking" />
             <NavLink href="/bookings" label="My Bookings" />
             <NavLink href="/waitlist" label="Waitlist" />
+            {isAuthenticated && !isOwner && !isAdmin && <NavLink href="/dashboard" label="Dashboard" />}
             {isOwner && <NavLink href="/owner/dashboard" label="Owner" ownerStyle />}
             <NavLink href="/admin" label="Analytics" />
 
@@ -156,6 +157,13 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                       <Car className="h-4 w-4" /> My Bookings
                     </Link>
                   </DropdownMenuItem>
+                  {!isOwner && !isAdmin && (
+                    <DropdownMenuItem asChild>
+                      <Link href="/dashboard" className="flex items-center gap-2 cursor-pointer">
+                        <LayoutDashboard className="h-4 w-4" /> My Dashboard
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
                   {isOwner && (
                     <DropdownMenuItem asChild>
                       <Link href="/owner/dashboard" className="flex items-center gap-2 cursor-pointer">
@@ -262,6 +270,9 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
             {[
               { href: "/map", label: "Find Parking", icon: <MapPin className="h-4 w-4" /> },
               { href: "/bookings", label: "My Bookings", icon: <Car className="h-4 w-4" /> },
+              ...(!isOwner && !isAdmin && isAuthenticated
+                ? [{ href: "/dashboard", label: "My Dashboard", icon: <LayoutDashboard className="h-4 w-4" /> }]
+                : []),
               { href: "/waitlist", label: "Waitlist", icon: <Clock className="h-4 w-4" /> },
               { href: "/notifications", label: "Notifications", icon: <Bell className="h-4 w-4" /> },
             ].map(({ href, label, icon }) => (

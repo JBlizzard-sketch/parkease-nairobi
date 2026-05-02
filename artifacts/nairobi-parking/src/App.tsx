@@ -16,6 +16,7 @@ import Login from "@/pages/login";
 import Profile from "@/pages/profile";
 import Notifications from "@/pages/notifications";
 import AdminAnalytics from "@/pages/admin";
+import CommuterDashboard from "@/pages/commuter-dashboard";
 import OwnerDashboard from "@/pages/owner/dashboard";
 import OwnerSpots from "@/pages/owner/spots";
 import OwnerNewSpot from "@/pages/owner/new-spot";
@@ -38,6 +39,7 @@ function Router() {
         <Route path="/login" component={Login} />
         <Route path="/profile" component={Profile} />
         <Route path="/notifications" component={Notifications} />
+        <Route path="/dashboard" component={CommuterDashboard} />
         <Route path="/admin" component={AdminAnalytics} />
 
         <Route path="/owner/dashboard" component={OwnerDashboard} />
