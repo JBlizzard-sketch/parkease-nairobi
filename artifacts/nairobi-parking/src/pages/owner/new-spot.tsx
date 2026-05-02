@@ -15,12 +15,19 @@ import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, TrendingUp, Clock, DollarSign, Zap, CheckCircle2, Info } from "lucide-react";
+import { ArrowLeft, TrendingUp, Clock, DollarSign, Zap, CheckCircle2 } from "lucide-react";
 import { Link } from "wouter";
+import { MapPicker } from "@/components/map-picker";
 
 const ZONES = ["Westlands", "CBD", "Upperhill", "Kilimani", "Hurlingham", "Parklands", "Karen", "Lavington", "Other"] as const;
 const SPOT_TYPES = ["driveway", "compound", "basement", "open_plot", "church", "office"] as const;
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
+
+const ZONE_CENTERS: Record<string, [number, number]> = {
+  Westlands: [-1.2672, 36.8102], CBD: [-1.2841, 36.8234], Upperhill: [-1.2985, 36.8196],
+  Kilimani: [-1.2964, 36.7891], Hurlingham: [-1.3002, 36.7956], Parklands: [-1.2609, 36.8166],
+  Karen: [-1.3195, 36.7099], Lavington: [-1.2847, 36.7762], Other: [-1.2921, 36.8219],
+};
 
 const ZONE_AVG_PRICES: Record<string, number> = {
   Westlands: 200, CBD: 250, Upperhill: 180, Kilimani: 160,
@@ -73,6 +80,8 @@ export default function OwnerNewSpot() {
   const watchedTo = useWatch({ control: form.control, name: "availableTo" }) ?? 18;
   const watchedDays = useWatch({ control: form.control, name: "availableDays" }) ?? [];
   const watchedZone = useWatch({ control: form.control, name: "zone" }) ?? "Westlands";
+  const watchedLat = useWatch({ control: form.control, name: "lat" }) ?? -1.2672;
+  const watchedLng = useWatch({ control: form.control, name: "lng" }) ?? 36.8102;
 
   const hoursPerDay = Math.max(0, watchedTo - watchedFrom);
   const daysPerWeek = watchedDays.length;
@@ -145,7 +154,7 @@ export default function OwnerNewSpot() {
                     <FormField control={form.control} name="zone" render={({ field }) => (
                       <FormItem>
                         <FormLabel>Zone</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <Select onValueChange={(zone) => { field.onChange(zone); const c = ZONE_CENTERS[zone] ?? [-1.2921, 36.8219]; form.setValue("lat", c[0]); form.setValue("lng", c[1]); }} defaultValue={field.value}>
                           <FormControl><SelectTrigger data-testid="select-zone"><SelectValue /></SelectTrigger></FormControl>
                           <SelectContent>{ZONES.map((z) => <SelectItem key={z} value={z}>{z}</SelectItem>)}</SelectContent>
                         </Select>
@@ -163,26 +172,18 @@ export default function OwnerNewSpot() {
                       </FormItem>
                     )} />
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField control={form.control} name="lat" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Latitude</FormLabel>
-                        <FormControl><Input data-testid="input-lat" type="number" step="0.0001" {...field} /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    <FormField control={form.control} name="lng" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Longitude</FormLabel>
-                        <FormControl><Input data-testid="input-lng" type="number" step="0.0001" {...field} /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
+                  <div className="space-y-1.5">
+                    <p className="text-sm font-medium leading-none">Pin Your Spot on the Map</p>
+                    <MapPicker
+                      lat={watchedLat}
+                      lng={watchedLng}
+                      onChange={(lat, lng) => {
+                        form.setValue("lat", lat, { shouldValidate: true });
+                        form.setValue("lng", lng, { shouldValidate: true });
+                      }}
+                      flyToCenter={ZONE_CENTERS[watchedZone] ?? [-1.2921, 36.8219]}
+                    />
                   </div>
-                  <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                    <Info className="h-3.5 w-3.5" />
-                    Nairobi lat: -1.286 / lng: 36.817 — adjust for your exact location
-                  </p>
                 </CardContent>
               </Card>
 

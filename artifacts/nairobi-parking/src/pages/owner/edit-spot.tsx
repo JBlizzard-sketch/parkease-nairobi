@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Eye, Star, Car, CheckCircle2, TrendingUp } from "lucide-react";
 import { Link } from "wouter";
+import { MapPicker } from "@/components/map-picker";
 
 const ZONES = ["Westlands", "CBD", "Upperhill", "Kilimani", "Hurlingham", "Parklands", "Karen", "Lavington", "Other"] as const;
 const SPOT_TYPES = ["driveway", "compound", "basement", "open_plot", "church", "office"] as const;
@@ -27,6 +28,8 @@ const formSchema = z.object({
   description: z.string().optional(),
   address: z.string().min(5),
   zone: z.string(),
+  lat: z.coerce.number().min(-90).max(90),
+  lng: z.coerce.number().min(-180).max(180),
   pricePerHour: z.coerce.number().min(10),
   availableFrom: z.coerce.number().min(0).max(23),
   availableTo: z.coerce.number().min(1).max(24),
@@ -59,12 +62,16 @@ export default function OwnerEditSpot() {
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      title: "", description: "", address: "", zone: "Westlands", pricePerHour: 150,
+      title: "", description: "", address: "", zone: "Westlands",
+      lat: -1.2921, lng: 36.8219,
+      pricePerHour: 150,
       availableFrom: 7, availableTo: 18, availableDays: ["Mon","Tue","Wed","Thu","Fri"],
       spotType: "driveway", hasCctv: false, hasRoofing: false, hasGate: true,
       accessInstructions: "", isActive: true, photos: "",
     },
   });
+
+  const [mapKey, setMapKey] = useState("initial");
 
   useEffect(() => {
     if (spot) {
@@ -73,6 +80,8 @@ export default function OwnerEditSpot() {
         description: spot.description ?? "",
         address: spot.address,
         zone: spot.zone,
+        lat: (spot as any).lat ?? -1.2921,
+        lng: (spot as any).lng ?? 36.8219,
         pricePerHour: spot.pricePerHour,
         availableFrom: spot.availableFrom,
         availableTo: spot.availableTo,
@@ -85,6 +94,7 @@ export default function OwnerEditSpot() {
         isActive: spot.isActive,
         photos: spot.photos.join("\n"),
       });
+      setMapKey(`spot-${spot.id}`);
     }
   }, [spot, form]);
 
@@ -92,6 +102,8 @@ export default function OwnerEditSpot() {
   const watchedFrom = useWatch({ control: form.control, name: "availableFrom" }) ?? 7;
   const watchedTo = useWatch({ control: form.control, name: "availableTo" }) ?? 18;
   const watchedDays = useWatch({ control: form.control, name: "availableDays" }) ?? [];
+  const watchedLat = useWatch({ control: form.control, name: "lat" }) ?? -1.2921;
+  const watchedLng = useWatch({ control: form.control, name: "lng" }) ?? 36.8219;
 
   const hoursPerDay = Math.max(0, watchedTo - watchedFrom);
   const monthlyRevenue = Math.round(watchedPrice * hoursPerDay * watchedDays.length * 4.3 * 0.6 * 0.85);
@@ -209,6 +221,18 @@ export default function OwnerEditSpot() {
                         <FormMessage />
                       </FormItem>
                     )} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <p className="text-sm font-medium leading-none">Pin Location on Map</p>
+                    <MapPicker
+                      key={mapKey}
+                      lat={watchedLat}
+                      lng={watchedLng}
+                      onChange={(lat, lng) => {
+                        form.setValue("lat", lat);
+                        form.setValue("lng", lng);
+                      }}
+                    />
                   </div>
                 </CardContent>
               </Card>
