@@ -431,7 +431,7 @@ export default function CommuterDashboard() {
               <Heart className="h-4 w-4 text-red-500" />Saved Spots
             </CardTitle>
             <Button variant="ghost" size="sm" className="text-xs h-7 text-muted-foreground" asChild>
-              <Link href="/map">Browse more <ChevronRight className="h-3 w-3 ml-0.5" /></Link>
+              <Link href="/saved">See all <ChevronRight className="h-3 w-3 ml-0.5" /></Link>
             </Button>
           </CardHeader>
           <CardContent className="pt-0">
@@ -485,7 +485,7 @@ export default function CommuterDashboard() {
         {[
           { icon: <MapPin className="h-4 w-4" />, label: "Find Parking", href: "/map", color: "text-primary" },
           { icon: <Car className="h-4 w-4" />, label: "My Bookings", href: "/bookings", color: "text-blue-600" },
-          { icon: <Heart className="h-4 w-4" />, label: "Saved Spots", href: "/map", color: "text-red-500" },
+          { icon: <Heart className="h-4 w-4" />, label: "Saved Spots", href: "/saved", color: "text-red-500" },
           { icon: <Shield className="h-4 w-4" />, label: "My Profile", href: "/profile", color: "text-violet-600" },
         ].map((a) => (
           <Link key={a.label} href={a.href}>

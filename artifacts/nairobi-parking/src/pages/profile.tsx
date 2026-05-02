@@ -324,7 +324,9 @@ export default function Profile() {
                 <Heart className="h-4 w-4 text-red-500 fill-red-500" />
                 Saved Spots
               </CardTitle>
-              <span className="text-xs text-muted-foreground">{favorites.size} saved</span>
+              <Link href="/saved" className="text-xs text-primary hover:underline font-medium">
+                {favorites.size} saved · See all →
+              </Link>
             </div>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -336,9 +338,9 @@ export default function Profile() {
               />
             ))}
             {favorites.size > 6 && (
-              <p className="text-xs text-center text-muted-foreground pt-1">
-                +{favorites.size - 6} more saved spots
-              </p>
+              <Link href="/saved" className="block text-xs text-center text-primary hover:underline font-medium pt-1">
+                +{favorites.size - 6} more saved spots →
+              </Link>
             )}
           </CardContent>
         </Card>
