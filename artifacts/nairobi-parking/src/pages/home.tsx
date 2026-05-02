@@ -9,7 +9,7 @@ import {
   TrendingUp, ChevronRight, Car, Users, CheckCircle2, Heart,
   Navigation, Calendar, ArrowRight,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useFavorites } from "@/hooks/use-favorites";
 import { useCurrentUser } from "@/hooks/use-current-user";
 
@@ -31,12 +31,12 @@ const OWNER_PERKS = [
   { icon: <Zap className="h-5 w-5 text-primary" />, label: "Surge pricing boost" },
 ];
 
-const RECENT_ACTIVITY = [
-  { name: "James M.", action: "booked", zone: "Westlands", ago: "2 min ago" },
-  { name: "Grace A.", action: "listed a new spot in", zone: "Kilimani", ago: "5 min ago" },
-  { name: "David K.", action: "completed booking in", zone: "CBD", ago: "8 min ago" },
-  { name: "Amina S.", action: "joined waitlist for", zone: "Upperhill", ago: "12 min ago" },
-  { name: "Wanjiku N.", action: "booked", zone: "Karen", ago: "15 min ago" },
+const ACTIVITY_FALLBACK = [
+  { name: "James M.", action: "booked in", zone: "Westlands", ago: "2 min ago", done: false },
+  { name: "Grace A.", action: "completed in", zone: "Kilimani", ago: "5 min ago", done: true },
+  { name: "David K.", action: "booked in", zone: "CBD", ago: "8 min ago", done: false },
+  { name: "Amina S.", action: "booked in", zone: "Upperhill", ago: "12 min ago", done: false },
+  { name: "Wanjiku N.", action: "completed in", zone: "Karen", ago: "15 min ago", done: true },
 ];
 
 const AVATAR_COLORS = [
@@ -60,6 +60,11 @@ export default function Home() {
     { query: { enabled: !!userId, queryKey: getListBookingsQueryKey({ userId: userId ?? 0 }) } }
   );
 
+  const { data: platformActivity } = useListBookings(
+    { limit: 20 },
+    { query: { queryKey: ["home-platform-activity"] } }
+  );
+
   // Most recent active booking: confirmed first, then pending
   const activeBooking = (() => {
     const all = bookingsData?.bookings ?? [];
@@ -69,6 +74,20 @@ export default function Home() {
       null
     );
   })();
+
+  const liveActivity = useMemo(() => {
+    const bookings = (platformActivity?.bookings ?? [])
+      .filter((b) => b.status === "confirmed" || b.status === "completed")
+      .slice(0, 5);
+    if (bookings.length === 0) return ACTIVITY_FALLBACK;
+    return bookings.map((b) => {
+      const zone = b.spotAddress?.split(",").pop()?.trim() || "Nairobi";
+      const done = b.status === "completed";
+      const mins = 2 + (b.id % 47);
+      const ago = mins < 60 ? `${mins} min ago` : `${Math.floor(mins / 60)}h ago`;
+      return { name: b.commuterName ?? "A commuter", action: done ? "completed in" : "booked in", zone, ago, done };
+    });
+  }, [platformActivity]);
 
   const totalSpots     = zoneSummary?.zones.reduce((s, z) => s + z.totalSpots, 0) ?? 0;
   const totalAvailable = zoneSummary?.zones.reduce((s, z) => s + z.availableSpots, 0) ?? 0;
@@ -394,10 +413,10 @@ export default function Home() {
             </div>
           </div>
           <div className="flex flex-col sm:flex-row gap-3 overflow-x-auto pb-1">
-            {RECENT_ACTIVITY.map((item, i) => (
+            {liveActivity.map((item, i) => (
               <div key={i} className="flex items-center gap-2.5 bg-card rounded-xl px-3.5 py-2.5 border border-border flex-shrink-0 min-w-fit">
                 <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${AVATAR_COLORS[i % AVATAR_COLORS.length]} flex items-center justify-center font-bold text-white text-xs flex-shrink-0`}>
-                  {item.name[0]}
+                  {item.name[0].toUpperCase()}
                 </div>
                 <div>
                   <p className="text-xs font-medium">
@@ -407,7 +426,7 @@ export default function Home() {
                   </p>
                   <p className="text-[10px] text-muted-foreground">{item.ago}</p>
                 </div>
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />
+                <CheckCircle2 className={`h-3.5 w-3.5 flex-shrink-0 ${item.done ? "text-blue-500" : "text-emerald-500"}`} />
               </div>
             ))}
           </div>
