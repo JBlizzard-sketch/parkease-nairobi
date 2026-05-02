@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   CheckCircle2, Clock, MapPin, Smartphone, Lock, Star, ArrowLeft,
   Copy, Share2, Loader2, AlertCircle, Receipt, Car, XCircle,
+  Navigation, CalendarPlus,
 } from "lucide-react";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
@@ -154,6 +155,37 @@ export default function BookingConfirmation() {
 
   const handleCancelConfirm = () => {
     updateStatus.mutate({ id: bookingId, data: { status: "cancelled" } });
+  };
+
+  const handleAddToCalendar = () => {
+    if (!booking) return;
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const dateBase = booking.date.replace(/-/g, "");
+    const dtStart = `${dateBase}T${pad(booking.startHour)}0000`;
+    const dtEnd   = `${dateBase}T${pad(booking.endHour)}0000`;
+    const ics = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//ParkEase Nairobi//EN",
+      "BEGIN:VEVENT",
+      `UID:parkease-${bookingId}@parkease.ke`,
+      `DTSTART:${dtStart}`,
+      `DTEND:${dtEnd}`,
+      `SUMMARY:Parking at ${booking.spotTitle}`,
+      `DESCRIPTION:ParkEase booking #${bookingId}\\nAmount: KES ${booking.totalAmount}${booking.mpesaCode ? `\\nMpesa: ${booking.mpesaCode}` : ""}`,
+      `LOCATION:${booking.spotAddress}`,
+      "STATUS:CONFIRMED",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n");
+    const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `parkease-booking-${bookingId}.ics`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast({ title: "Calendar file downloaded", description: "Open it to add to your calendar app." });
   };
 
   if (isLoading) {
@@ -486,6 +518,26 @@ export default function BookingConfirmation() {
             </button>
           </CardContent>
         </Card>
+      )}
+
+      {/* ── GET DIRECTIONS + ADD TO CALENDAR ── */}
+      {(isConfirmed || isCompleted) && (
+        <div className="grid grid-cols-2 gap-3">
+          <a
+            href={`https://www.google.com/maps/dir/?api=1&destination=${booking.spotLat},${booking.spotLng}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <Button variant="outline" className="w-full gap-2 text-blue-600 border-blue-200 hover:bg-blue-50">
+              <Navigation className="h-4 w-4" />
+              Get Directions
+            </Button>
+          </a>
+          <Button variant="outline" className="gap-2" onClick={handleAddToCalendar}>
+            <CalendarPlus className="h-4 w-4" />
+            Add to Calendar
+          </Button>
+        </div>
       )}
 
       {/* ── LOCKED ACCESS HINT ── */}

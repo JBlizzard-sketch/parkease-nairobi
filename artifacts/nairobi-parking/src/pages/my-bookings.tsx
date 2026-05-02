@@ -15,7 +15,7 @@ import {
 import { Link } from "wouter";
 import {
   Calendar, Clock, MapPin, ArrowRight, Car, CreditCard,
-  CheckCircle2, AlertCircle, Star, TrendingUp, XCircle, Loader2,
+  CheckCircle2, AlertCircle, Star, TrendingUp, XCircle, Loader2, Navigation,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -183,6 +183,20 @@ export default function MyBookings() {
             </div>
 
             <div className="flex gap-2 flex-shrink-0 pl-4 sm:pl-0 flex-wrap sm:flex-nowrap">
+              {/* Directions for confirmed bookings */}
+              {isConfirmed && (
+                <a
+                  href={`https://www.google.com/maps/dir/?api=1&destination=${booking.spotLat},${booking.spotLng}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Button variant="outline" size="sm" className="gap-1.5 text-blue-600 border-blue-200 hover:bg-blue-50">
+                    <Navigation className="h-3.5 w-3.5" />
+                    Directions
+                  </Button>
+                </a>
+              )}
               {/* Cancel button for active bookings */}
               {showCancel && (isPending || isConfirmed) && (
                 <Button

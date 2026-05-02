@@ -1,14 +1,17 @@
-import { useGetZoneSummary, useGetMapSpots } from "@workspace/api-client-react";
+import { useGetZoneSummary, useGetMapSpots, useListBookings, getListBookingsQueryKey } from "@workspace/api-client-react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
   Search, MapPin, Zap, ShieldCheck, Clock, CreditCard, Star,
   TrendingUp, ChevronRight, Car, Users, CheckCircle2, Heart,
+  Navigation, Calendar, ArrowRight,
 } from "lucide-react";
 import { useState } from "react";
 import { useFavorites } from "@/hooks/use-favorites";
+import { useCurrentUser } from "@/hooks/use-current-user";
 
 const ZONE_ICONS: Record<string, string> = {
   Westlands: "🏙️", CBD: "🏢", Upperhill: "🏥", Kilimani: "🌿",
@@ -42,12 +45,30 @@ const AVATAR_COLORS = [
   "from-pink-400 to-pink-600", "from-cyan-400 to-cyan-600",
 ];
 
+const fmtHour = (h: number) => `${h % 12 || 12}:00 ${h < 12 ? "AM" : "PM"}`;
+
 export default function Home() {
   const { data: zoneSummary, isLoading } = useGetZoneSummary();
   const { data: mapData } = useGetMapSpots({ lat: -1.2921, lng: 36.8219, radiusKm: 20 });
   const [searchQuery, setSearchQuery] = useState("");
   const [, setLocation] = useLocation();
   const { isFavorite, toggle: toggleFavorite } = useFavorites();
+  const { userId } = useCurrentUser();
+
+  const { data: bookingsData } = useListBookings(
+    { userId: userId ?? 0 },
+    { query: { enabled: !!userId, queryKey: getListBookingsQueryKey({ userId: userId ?? 0 }) } }
+  );
+
+  // Most recent active booking: confirmed first, then pending
+  const activeBooking = (() => {
+    const all = bookingsData?.bookings ?? [];
+    return (
+      all.find((b) => b.status === "confirmed") ??
+      all.find((b) => b.status === "pending") ??
+      null
+    );
+  })();
 
   const totalSpots     = zoneSummary?.zones.reduce((s, z) => s + z.totalSpots, 0) ?? 0;
   const totalAvailable = zoneSummary?.zones.reduce((s, z) => s + z.availableSpots, 0) ?? 0;
@@ -128,6 +149,48 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {/* ── Active Booking Banner ── */}
+      {activeBooking && (
+        <section className="bg-primary/5 border-b border-primary/20">
+          <div className="container mx-auto max-w-4xl px-4 py-3">
+            <div className="flex items-center gap-4 flex-wrap sm:flex-nowrap">
+              <div className={`flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center ${activeBooking.status === "confirmed" ? "bg-emerald-100 text-emerald-600" : "bg-amber-100 text-amber-600"}`}>
+                {activeBooking.status === "confirmed" ? <CheckCircle2 className="h-5 w-5" /> : <Clock className="h-5 w-5" />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold leading-tight truncate">{activeBooking.spotTitle}</p>
+                <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground mt-0.5">
+                  <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{activeBooking.date}</span>
+                  <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{fmtHour(activeBooking.startHour)} – {fmtHour(activeBooking.endHour)}</span>
+                  <Badge className={`text-[10px] px-1.5 py-0 h-4 ${activeBooking.status === "confirmed" ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-amber-100 text-amber-700 border-amber-200"}`}>
+                    {activeBooking.status === "confirmed" ? "Confirmed" : "Awaiting Payment"}
+                  </Badge>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
+                {activeBooking.status === "confirmed" && (
+                  <a
+                    href={`https://www.google.com/maps/dir/?api=1&destination=${activeBooking.spotLat},${activeBooking.spotLng}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs text-blue-600 border-blue-200 hover:bg-blue-50">
+                      <Navigation className="h-3.5 w-3.5" />
+                      Directions
+                    </Button>
+                  </a>
+                )}
+                <Link href={`/book/${activeBooking.id}`}>
+                  <Button size="sm" className="gap-1.5 h-8 text-xs">
+                    View <ArrowRight className="h-3 w-3" />
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* ── Live Trust Stats ── */}
       <section className="bg-card border-b border-border">
