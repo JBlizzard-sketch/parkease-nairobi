@@ -50,6 +50,111 @@ const AVATAR_COLORS = [
   "from-amber-400 to-amber-600",
 ];
 
+// Zone-based 24h demand profiles (1–10 scale). Values represent typical hourly occupancy pressure.
+const ZONE_DEMAND_PROFILES: Record<string, number[]> = {
+  CBD:        [2,1,1,1,2,4,7,10,10,8,7,8,10,9,8,7,8,10,10,8,6,5,4,3],
+  Westlands:  [2,1,1,1,2,3,5,8,9,10,9,8,9,8,7,6,7,9,9,7,5,4,3,2],
+  Upperhill:  [2,1,1,1,2,4,6,9,10,9,8,8,9,10,9,8,9,10,9,7,5,4,3,2],
+  Kilimani:   [2,1,1,1,2,3,4,6,8,9,10,10,10,9,8,7,7,8,8,7,5,4,3,2],
+  Hurlingham: [2,1,1,1,2,3,4,6,8,9,10,9,8,9,8,7,8,9,9,7,5,4,3,2],
+  Parklands:  [2,1,1,1,2,3,5,8,9,10,9,8,9,8,7,7,8,9,9,8,6,4,3,2],
+  Karen:      [2,1,1,1,2,3,5,8,9,8,7,8,9,8,7,6,7,8,8,6,5,4,3,2],
+  Lavington:  [2,1,1,1,2,3,4,6,8,9,9,9,10,9,8,7,8,9,9,7,5,4,3,2],
+};
+
+function getDemandData(spotId: number, zone: string): number[] {
+  const base = ZONE_DEMAND_PROFILES[zone] ?? ZONE_DEMAND_PROFILES.CBD;
+  return base.map((v, i) => {
+    const jitter = ((spotId * 3 + i * 7) % 5) - 2; // deterministic ±2 per hour
+    return Math.max(1, Math.min(10, v + jitter));
+  });
+}
+
+function PeakHoursWidget({
+  spotId, zone, availableFrom, availableTo, startHour, endHour, surgeMultiplier,
+}: {
+  spotId: number; zone: string; availableFrom: number; availableTo: number;
+  startHour: number; endHour: number; surgeMultiplier: number;
+}) {
+  const demand = getDemandData(spotId, zone);
+
+  // Best consecutive 2h window within available range
+  let bestStart = availableFrom;
+  let bestScore = Infinity;
+  for (let h = availableFrom; h <= availableTo - 2; h++) {
+    const score = (demand[h] ?? 5) + (demand[h + 1] ?? 5);
+    if (score < bestScore) { bestScore = score; bestStart = h; }
+  }
+
+  const windowDemand = endHour > startHour
+    ? demand.slice(startHour, endHour).reduce((s, v) => s + v, 0) / (endHour - startHour)
+    : 0;
+  const demandLevel = windowDemand <= 3 ? "Low" : windowDemand <= 6 ? "Medium" : "High";
+  const demandColor = windowDemand <= 3 ? "text-emerald-600" : windowDemand <= 6 ? "text-amber-600" : "text-red-600";
+
+  const barColor = (h: number, d: number) => {
+    const available = h >= availableFrom && h < availableTo;
+    const selected  = h >= startHour && h < endHour;
+    if (!available) return "bg-muted";
+    if (d <= 3) return selected ? "bg-emerald-600" : "bg-emerald-300";
+    if (d <= 6) return selected ? "bg-amber-500"   : "bg-amber-300";
+    return selected ? "bg-red-600" : "bg-red-300";
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Clock className="h-4 w-4 text-muted-foreground" />
+          Typical Demand by Hour
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">Hourly booking patterns in {zone} — shaded bars show your selected window</p>
+      </CardHeader>
+      <CardContent className="space-y-2 pb-4">
+        {/* Bar chart */}
+        <div className="flex items-end gap-[1.5px] h-14 mt-1">
+          {demand.map((d, h) => (
+            <div
+              key={h}
+              className={`flex-1 rounded-sm transition-colors ${barColor(h, d)}`}
+              style={{ height: `${(d / 10) * 56}px` }}
+              title={`${fmtHour(h)} — ${d <= 3 ? "Low" : d <= 6 ? "Medium" : "High"} demand`}
+            />
+          ))}
+        </div>
+
+        {/* X-axis */}
+        <div className="flex justify-between text-[10px] text-muted-foreground/70 px-0">
+          <span>12am</span><span>6am</span><span>12pm</span><span>6pm</span><span>11pm</span>
+        </div>
+
+        {/* Legend + recommendation */}
+        <div className="flex items-center justify-between gap-3 pt-1 border-t border-border text-xs">
+          <div className="flex items-center gap-3">
+            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-300 inline-block" />Low</span>
+            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-amber-300 inline-block" />Medium</span>
+            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-red-300 inline-block" />High</span>
+          </div>
+          {endHour > startHour && (
+            <span className={`font-semibold ${demandColor}`}>{demandLevel} demand window</span>
+          )}
+        </div>
+
+        {/* Smart tip */}
+        {(surgeMultiplier > 1 || (endHour > startHour && windowDemand > 6)) && bestStart !== startHour && (
+          <div className="flex items-start gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-2.5 py-2 text-xs text-emerald-800">
+            <Zap className="h-3 w-3 flex-shrink-0 mt-0.5 text-emerald-600" />
+            <span>
+              <span className="font-semibold">Tip:</span> Lower demand around{" "}
+              <span className="font-semibold">{fmtHour(bestStart)}</span> — consider parking earlier for standard pricing.
+            </span>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function SpotDetail() {
   const params = useParams<{ id: string }>();
   const id = parseInt(params.id, 10);
@@ -436,6 +541,17 @@ export default function SpotDetail() {
               )}
             </CardContent>
           </Card>
+
+          {/* Peak Hours heatmap */}
+          <PeakHoursWidget
+            spotId={spot.id}
+            zone={spot.zone}
+            availableFrom={spot.availableFrom}
+            availableTo={spot.availableTo}
+            startHour={startHour}
+            endHour={endHour}
+            surgeMultiplier={surgeMultiplier}
+          />
 
           {/* Reviews */}
           {reviews && reviews.reviews.length > 0 && (
