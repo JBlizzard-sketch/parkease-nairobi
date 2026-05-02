@@ -1,13 +1,16 @@
 import { useState, useMemo } from "react";
-import { useGetZoneSummary, useListBookings, useListSpots, getGetZoneSummaryQueryKey } from "@workspace/api-client-react";
+import { useGetZoneSummary, useListBookings, useListSpots, useUpdateSpot, getGetZoneSummaryQueryKey, getListSpotsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, LineChart, Line, AreaChart, Area } from "recharts";
-import { TrendingUp, Car, Users, Zap, MapPin, DollarSign, Activity, RefreshCw, Star, Clock, Shield, ArrowUpRight, Phone } from "lucide-react";
+import { TrendingUp, Car, Users, Zap, MapPin, DollarSign, Activity, RefreshCw, Star, Clock, Shield, ArrowUpRight, Phone, Search, ToggleLeft, ToggleRight, Eye, EyeOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { Link } from "wouter";
 
 const ZONE_COLORS = ["#00A957", "#f59e0b", "#3b82f6", "#ef4444", "#8b5cf6", "#06b6d4", "#f97316", "#84cc16"];
 const PIE_COLORS = { Confirmed: "#00A957", Completed: "#3b82f6", Pending: "#f59e0b", Cancelled: "#ef4444" };
@@ -17,6 +20,12 @@ export default function AdminAnalytics() {
   const { toast } = useToast();
   const [surgeRunning, setSurgeRunning] = useState(false);
   const [surgeResult, setSurgeResult] = useState<string | null>(null);
+  const [modSearch, setModSearch] = useState("");
+  const [modZone, setModZone] = useState("all");
+  const [modStatus, setModStatus] = useState("all");
+  const [togglingIds, setTogglingIds] = useState<Set<number>>(new Set());
+  const [modPage, setModPage] = useState(0);
+  const MOD_PAGE_SIZE = 10;
 
   const { data: zones, isLoading: zonesLoading } = useGetZoneSummary({
     query: { queryKey: getGetZoneSummaryQueryKey() }
@@ -112,6 +121,40 @@ export default function AdminAnalytics() {
       .map((o) => ({ ...o, avgRating: o.ratingCount ? o.ratingSum / o.ratingCount : null }))
       .sort((a, b) => b.totalBookings - a.totalBookings);
   }, [spots]);
+
+  const updateSpot = useUpdateSpot({
+    mutation: {
+      onSuccess: (_d, vars) => {
+        queryClient.invalidateQueries({ queryKey: getListSpotsQueryKey({}) });
+        setTogglingIds((prev) => { const next = new Set(prev); next.delete(vars.id); return next; });
+        toast({ title: "Spot updated", description: `Spot has been ${_d.isActive ? "activated" : "deactivated"}.` });
+      },
+      onError: (_e, vars) => {
+        setTogglingIds((prev) => { const next = new Set(prev); next.delete(vars.id); return next; });
+        toast({ title: "Update failed", variant: "destructive" });
+      },
+    },
+  });
+
+  const handleToggleSpot = (id: number, currentlyActive: boolean) => {
+    setTogglingIds((prev) => new Set([...prev, id]));
+    updateSpot.mutate({ id, data: { isActive: !currentlyActive } as any });
+  };
+
+  const ZONES_LIST = useMemo(() => [...new Set(spots.map((s) => s.zone))].sort(), [spots]);
+
+  const filteredSpots = useMemo(() => {
+    const q = modSearch.toLowerCase();
+    return spots.filter((s) => {
+      const matchSearch = !q || s.title.toLowerCase().includes(q) || s.address.toLowerCase().includes(q) || s.ownerName.toLowerCase().includes(q);
+      const matchZone = modZone === "all" || s.zone === modZone;
+      const matchStatus = modStatus === "all" || (modStatus === "active" ? s.isActive : !s.isActive);
+      return matchSearch && matchZone && matchStatus;
+    });
+  }, [spots, modSearch, modZone, modStatus]);
+
+  const modPagedSpots = filteredSpots.slice(modPage * MOD_PAGE_SIZE, (modPage + 1) * MOD_PAGE_SIZE);
+  const modTotalPages = Math.ceil(filteredSpots.length / MOD_PAGE_SIZE);
 
   const runSurgeEngine = async () => {
     setSurgeRunning(true);
@@ -383,6 +426,161 @@ export default function AdminAnalytics() {
             </CardContent>
           </Card>
         </div>
+      </div>
+
+      {/* ── SPOT MODERATION ── */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Shield className="h-5 w-5 text-primary" />
+          <h2 className="text-xl font-bold">Spot Moderation</h2>
+          <Badge variant="outline" className="text-xs ml-1">{totalSpots} spots</Badge>
+          <span className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span className="w-2 h-2 rounded-full bg-primary" /> {activeSpots} active
+            <span className="w-2 h-2 rounded-full bg-muted-foreground/40 ml-1" /> {totalSpots - activeSpots} inactive
+          </span>
+        </div>
+
+        {/* Filters */}
+        <div className="flex flex-wrap gap-2">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              placeholder="Search by title, address or owner…"
+              value={modSearch}
+              onChange={(e) => { setModSearch(e.target.value); setModPage(0); }}
+              className="pl-9 h-9 text-sm"
+            />
+          </div>
+          <Select value={modZone} onValueChange={(v) => { setModZone(v); setModPage(0); }}>
+            <SelectTrigger className="w-36 h-9 text-sm"><SelectValue placeholder="All zones" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All zones</SelectItem>
+              {ZONES_LIST.map((z) => <SelectItem key={z} value={z}>{z}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={modStatus} onValueChange={(v) => { setModStatus(v); setModPage(0); }}>
+            <SelectTrigger className="w-32 h-9 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All status</SelectItem>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="inactive">Inactive</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <Card>
+          <CardContent className="p-0">
+            {filteredSpots.length === 0 ? (
+              <div className="py-12 text-center text-muted-foreground text-sm">No spots match your filters</div>
+            ) : (
+              <>
+                {/* Table header */}
+                <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] gap-4 px-5 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide border-b border-border/60 bg-muted/30">
+                  <span>Spot</span>
+                  <span>Zone / Type</span>
+                  <span className="text-right">Price</span>
+                  <span className="text-right">Bookings</span>
+                  <span className="text-right">Rating</span>
+                  <span className="text-center">Active</span>
+                </div>
+
+                {modPagedSpots.map((spot, i) => {
+                  const isToggling = togglingIds.has(spot.id);
+                  return (
+                    <div
+                      key={spot.id}
+                      className={cn(
+                        "grid grid-cols-[1fr_auto] md:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] gap-3 md:gap-4 px-5 py-3.5 items-center border-b border-border/40 last:border-0 hover:bg-muted/20 transition-colors",
+                        !spot.isActive && "opacity-60"
+                      )}
+                    >
+                      {/* Title + owner */}
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Link href={`/spots/${spot.id}`}>
+                            <span className="font-medium text-sm hover:text-primary hover:underline cursor-pointer line-clamp-1">{spot.title}</span>
+                          </Link>
+                          {!spot.isActive && (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-muted-foreground/40 text-muted-foreground">hidden</Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground truncate mt-0.5">{spot.ownerName} · {spot.address}</p>
+                      </div>
+
+                      {/* Zone/type — hidden on mobile */}
+                      <div className="hidden md:block">
+                        <p className="text-sm font-medium">{spot.zone}</p>
+                        <p className="text-xs text-muted-foreground capitalize">{spot.spotType.replace("_", " ")}</p>
+                      </div>
+
+                      {/* Price */}
+                      <div className="hidden md:block text-right">
+                        <p className="text-sm font-medium">KES {spot.pricePerHour}</p>
+                        <p className="text-xs text-muted-foreground">/hr</p>
+                      </div>
+
+                      {/* Bookings */}
+                      <div className="hidden md:block text-right">
+                        <p className="text-sm font-bold">{spot.totalBookings}</p>
+                        <p className="text-xs text-muted-foreground">total</p>
+                      </div>
+
+                      {/* Rating */}
+                      <div className="hidden md:block text-right">
+                        {spot.rating ? (
+                          <p className="text-sm font-medium text-amber-600 flex items-center justify-end gap-0.5">
+                            <Star className="h-3 w-3 fill-current" />{spot.rating.toFixed(1)}
+                          </p>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">—</p>
+                        )}
+                        <p className="text-xs text-muted-foreground">{spot.reviewCount ?? 0} reviews</p>
+                      </div>
+
+                      {/* Toggle */}
+                      <div className="flex items-center justify-center">
+                        <button
+                          onClick={() => handleToggleSpot(spot.id, spot.isActive)}
+                          disabled={isToggling}
+                          title={spot.isActive ? "Deactivate spot" : "Activate spot"}
+                          className={cn(
+                            "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all",
+                            spot.isActive
+                              ? "border-primary/30 text-primary bg-primary/5 hover:bg-destructive/5 hover:border-destructive/30 hover:text-destructive"
+                              : "border-muted-foreground/30 text-muted-foreground bg-muted/40 hover:bg-primary/5 hover:border-primary/30 hover:text-primary",
+                            isToggling && "opacity-50 cursor-not-allowed"
+                          )}
+                        >
+                          {isToggling ? (
+                            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                          ) : spot.isActive ? (
+                            <Eye className="h-3.5 w-3.5" />
+                          ) : (
+                            <EyeOff className="h-3.5 w-3.5" />
+                          )}
+                          <span className="hidden sm:inline">{isToggling ? "…" : spot.isActive ? "Live" : "Off"}</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Pagination */}
+                {modTotalPages > 1 && (
+                  <div className="flex items-center justify-between px-5 py-3 border-t border-border/40 bg-muted/20">
+                    <p className="text-xs text-muted-foreground">
+                      {filteredSpots.length} spot{filteredSpots.length !== 1 ? "s" : ""} · page {modPage + 1} of {modTotalPages}
+                    </p>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" className="h-7 text-xs px-2.5" disabled={modPage === 0} onClick={() => setModPage((p) => p - 1)}>← Prev</Button>
+                      <Button size="sm" variant="outline" className="h-7 text-xs px-2.5" disabled={modPage >= modTotalPages - 1} onClick={() => setModPage((p) => p + 1)}>Next →</Button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       {/* Bottom row: Top spots + Spot types + Surge */}
