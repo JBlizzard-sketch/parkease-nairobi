@@ -221,6 +221,13 @@ export default function MyBookings() {
                   </Button>
                 </Link>
               )}
+              {isCompleted && (
+                <Link href={`/spots/${booking.spotId}?date=${new Date().toISOString().split("T")[0]}&start=${booking.startHour}&end=${booking.endHour}`}>
+                  <Button variant="outline" size="sm" className="gap-1.5 text-primary border-primary/30 hover:bg-primary/5 whitespace-nowrap" title="Book this spot again with the same hours">
+                    <Car className="h-3.5 w-3.5" />Book Again
+                  </Button>
+                </Link>
+              )}
               <Link href={`/book/${booking.id}`}>
                 <Button
                   variant={isPending ? "default" : "outline"}

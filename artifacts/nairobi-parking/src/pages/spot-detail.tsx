@@ -60,9 +60,13 @@ export default function SpotDetail() {
   const { isFavorite, toggle: toggleFavorite } = useFavorites();
 
   const today = new Date().toISOString().split("T")[0];
-  const [date, setDate] = useState(today);
-  const [startHour, setStartHour] = useState(8);
-  const [endHour, setEndHour] = useState(17);
+  const _qp = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams();
+  const _paramDate = _qp.get("date");
+  const _paramStart = parseInt(_qp.get("start") ?? "", 10);
+  const _paramEnd = parseInt(_qp.get("end") ?? "", 10);
+  const [date, setDate] = useState(_paramDate && /^\d{4}-\d{2}-\d{2}$/.test(_paramDate) ? _paramDate : today);
+  const [startHour, setStartHour] = useState(!isNaN(_paramStart) && _paramStart >= 0 && _paramStart < 24 ? _paramStart : 8);
+  const [endHour, setEndHour] = useState(!isNaN(_paramEnd) && _paramEnd > 0 && _paramEnd <= 24 ? _paramEnd : 17);
   const [photoIdx, setPhotoIdx] = useState(0);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState("");

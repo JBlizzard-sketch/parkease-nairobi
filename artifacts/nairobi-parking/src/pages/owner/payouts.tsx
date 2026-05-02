@@ -64,6 +64,32 @@ export default function OwnerPayouts() {
     });
   };
 
+  const handleExportCSV = () => {
+    if (payouts.length === 0) { toast({ title: "No payouts to export" }); return; }
+    const headers = ["Date", "Spot", "Period End", "Gross (KES)", "Platform Fee (KES)", "Net (KES)", "Status", "Mpesa Code"];
+    const rows = payouts.map((p) => [
+      p.periodStart,
+      `"${p.spotTitle.replace(/"/g, '""')}"`,
+      (p as any).periodEnd ?? "",
+      p.grossAmount,
+      p.platformFee,
+      p.netAmount,
+      p.status,
+      p.mpesaCode ?? "",
+    ]);
+    const csv = [headers, ...rows].map((r) => r.join(",")).join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `parkease-payouts-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast({ title: "CSV downloaded!", description: `${payouts.length} payout record${payouts.length > 1 ? "s" : ""} exported.` });
+  };
+
   return (
     <div className="container mx-auto p-4 max-w-4xl py-8 space-y-6">
       <div className="flex items-start justify-between gap-4">
@@ -208,8 +234,8 @@ export default function OwnerPayouts() {
         <div>
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-semibold text-base">Payout History</h2>
-            <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" onClick={() => toast({ title: "CSV export coming soon!" })}>
-              <Download className="h-3.5 w-3.5" /> Export
+            <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground" onClick={handleExportCSV}>
+              <Download className="h-3.5 w-3.5" /> Export CSV
             </Button>
           </div>
           <div className="space-y-2">
