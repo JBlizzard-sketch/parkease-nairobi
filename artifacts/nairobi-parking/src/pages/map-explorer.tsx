@@ -12,8 +12,9 @@ import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { SlidersHorizontal, Shield, Star, Zap, MapPin, Map, List, Heart, ArrowUpDown } from "lucide-react";
+import { SlidersHorizontal, Shield, Star, Zap, MapPin, Map, List, Heart, ArrowUpDown, LocateFixed } from "lucide-react";
 import { useFavorites } from "@/hooks/use-favorites";
+import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -58,6 +59,7 @@ export default function MapExplorer() {
   const [sortBy, setSortBy] = useState<SortKey>("default");
 
   const { isFavorite, toggle: toggleFavorite } = useFavorites();
+  const { toast } = useToast();
 
   useEffect(() => {
     const p = new URLSearchParams(window.location.search);
@@ -70,6 +72,8 @@ export default function MapExplorer() {
   const [filterMinRating, setFilterMinRating] = useState(0);
   const [filterSurge, setFilterSurge] = useState(false);
   const [searchText, setSearchText] = useState("");
+  const [userCenter, setUserCenter] = useState<[number, number] | null>(null);
+  const [locating, setLocating] = useState(false);
 
   const defaultLat = -1.2921;
   const defaultLng = 36.8219;
@@ -105,6 +109,7 @@ export default function MapExplorer() {
 
   const mapCenter = ZONE_CENTERS[filterZone] ?? [defaultLat, defaultLng];
   const mapZoom = filterZone === "All" ? 12 : 14;
+  const effectiveCenter: [number, number] = userCenter ?? (mapCenter as [number, number]);
 
   const activeFilterCount = [
     filterZone !== "All", filterMaxPrice < 500,
@@ -114,6 +119,26 @@ export default function MapExplorer() {
   const clearFilters = () => {
     setFilterZone("All"); setFilterMaxPrice(500);
     setFilterCctv(false); setFilterSurge(false); setFilterMinRating(0);
+  };
+
+  const handleLocate = () => {
+    if (!navigator.geolocation) {
+      toast({ title: "Geolocation not supported", description: "Your browser doesn't support location access.", variant: "destructive" });
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setUserCenter([pos.coords.latitude, pos.coords.longitude]);
+        setLocating(false);
+        toast({ title: "Centered on your location" });
+      },
+      () => {
+        setLocating(false);
+        toast({ title: "Location access denied", description: "Enable location in your browser settings.", variant: "destructive" });
+      },
+      { timeout: 10000 }
+    );
   };
 
   const FilterPanel = () => (
@@ -247,7 +272,7 @@ export default function MapExplorer() {
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
-      <MapUpdater lat={mapCenter[0]} lng={mapCenter[1]} zoom={mapZoom} />
+      <MapUpdater lat={effectiveCenter[0]} lng={effectiveCenter[1]} zoom={userCenter ? 14 : mapZoom} />
       {filteredSpots.map((spot) => (
         <Marker
           key={spot.id}
@@ -326,6 +351,18 @@ export default function MapExplorer() {
                   onChange={(e) => setSearchText(e.target.value)}
                 />
               </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className={cn("h-9 w-9 p-0 flex-shrink-0", userCenter && "border-primary text-primary")}
+                onClick={handleLocate}
+                disabled={locating}
+                title="Find spots near me"
+              >
+                {locating
+                  ? <span className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  : <LocateFixed className="h-4 w-4" />}
+              </Button>
               <Sheet>
                 <SheetTrigger asChild>
                   <Button variant="outline" size="sm" className="relative gap-1.5 h-9 flex-shrink-0">

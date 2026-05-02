@@ -13,6 +13,24 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { MapPin, Shield, Clock, Star, Car, Zap, ArrowLeft, CalendarDays, Lock, Heart, ChevronLeft, ChevronRight, Images, Share2, CheckCircle2, Phone } from "lucide-react";
 import { Link } from "wouter";
+import { MapContainer, TileLayer, Marker } from "react-leaflet";
+import L from "leaflet";
+
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
+
+function createPriceIcon(price: number) {
+  return L.divIcon({
+    className: 'custom-marker',
+    html: `<div style="background:#00A957;color:white;padding:4px 8px;border-radius:999px;font-weight:700;font-size:12px;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,0.3);border:2px solid white;">KES ${price}</div>`,
+    iconSize: [70, 30],
+    iconAnchor: [35, 30],
+  });
+}
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const fmtHour = (h: number) => `${h % 12 || 12}:00 ${h < 12 ? "AM" : "PM"}`;
@@ -340,6 +358,38 @@ export default function SpotDetail() {
               </CardContent>
             </Card>
           )}
+
+          {/* Mini-map */}
+          <Card className="overflow-hidden">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <MapPin className="h-4 w-4 text-primary" />
+                Location
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div style={{ height: 200 }}>
+                <MapContainer
+                  center={[spot.lat, spot.lng]}
+                  zoom={15}
+                  style={{ height: "100%", width: "100%", zIndex: 0 }}
+                  scrollWheelZoom={false}
+                  zoomControl={true}
+                  dragging={true}
+                >
+                  <TileLayer
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  />
+                  <Marker position={[spot.lat, spot.lng]} icon={createPriceIcon(spot.pricePerHour)} />
+                </MapContainer>
+              </div>
+              <div className="p-3 border-t border-border flex items-center gap-2 text-sm text-muted-foreground">
+                <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
+                <span className="line-clamp-1">{spot.address}</span>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Access hint */}
           <Card className="border-dashed">
