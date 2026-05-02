@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useCurrentUser } from "@/hooks/use-current-user";
-import { useListBookings } from "@workspace/api-client-react";
+import { useListBookings, useGetZoneSummary } from "@workspace/api-client-react";
 import { Link, useLocation } from "wouter";
 import { Bell, Car, Star, Wallet, Clock, Zap, CheckCircle2, XCircle, MapPin, AlertCircle, ArrowRight, BellOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -23,146 +23,182 @@ interface Notification {
   href?: string;
 }
 
-function buildNotifications(userId: number, role: string): Notification[] {
-  const isOwner = role === "owner" || role === "both";
-  const isCommuter = role === "commuter" || role === "both";
-  const seed = userId % 3;
+const fmtHour = (h: number) => `${h % 12 || 12}${h < 12 ? "am" : "pm"}`;
 
-  const commuter: Notification[] = [
-    {
-      id: "c1", category: "bookings",
-      icon: <CheckCircle2 className="h-4 w-4" />, iconBg: "bg-emerald-100 text-emerald-600",
-      title: "Booking Confirmed!",
-      body: "Your spot at Westlands Church Compound is confirmed for today 9 AM – 12 PM. Access code: WCC-8821.",
-      time: "32 min ago", timeGroup: "today", read: false, href: "/bookings",
-    },
-    {
-      id: "c2", category: "bookings",
-      icon: <Clock className="h-4 w-4" />, iconBg: "bg-amber-100 text-amber-600",
-      title: "Booking Reminder",
-      body: "Your parking at Kilimani Compound starts in 2 hours. Don't forget to pay via Mpesa before arrival.",
-      time: "1 hr ago", timeGroup: "today", read: false, href: "/bookings",
-    },
-    {
-      id: "c3", category: "ratings",
-      icon: <Star className="h-4 w-4" />, iconBg: "bg-yellow-100 text-yellow-600",
-      title: "Rate Your Recent Visit",
-      body: seed === 0
-        ? "How was CBD Basement Parking? Share your experience to help other commuters."
-        : "How was Upperhill Office Compound? Your feedback helps owners improve.",
-      time: "3 hrs ago", timeGroup: "today", read: true, href: "/bookings",
-    },
-    {
-      id: "c4", category: "waitlist",
-      icon: <Zap className="h-4 w-4" />, iconBg: "bg-purple-100 text-purple-600",
-      title: "Waitlist Spot Available!",
-      body: seed === 1
-        ? "A spot opened in Westlands — you're #1 on the waitlist. Claim it before it fills up!"
-        : "A spot opened in CBD — you're #2 on the waitlist. One person ahead of you.",
-      time: "5 hrs ago", timeGroup: "today", read: false, href: "/waitlist",
-    },
-    {
-      id: "c5", category: "bookings",
-      icon: <XCircle className="h-4 w-4" />, iconBg: "bg-red-100 text-red-500",
-      title: "Booking Declined",
-      body: "The owner of Karen Driveway declined your request for Saturday. Browse alternatives on the map.",
-      time: "Yesterday", timeGroup: "week", read: true, href: "/map",
-    },
-    {
-      id: "c6", category: "ratings",
-      icon: <Star className="h-4 w-4" />, iconBg: "bg-yellow-100 text-yellow-600",
-      title: "Owner Rated You ★★★★★",
-      body: "James M. (Westlands Church) gave you 5 stars. \"Punctual and respectful of the space.\"",
-      time: "2 days ago", timeGroup: "week", read: true,
-    },
-    {
-      id: "c7", category: "waitlist",
-      icon: <Bell className="h-4 w-4" />, iconBg: "bg-blue-100 text-blue-600",
-      title: "Waitlist Position Updated",
-      body: "You moved from #5 to #3 on the Parklands waitlist. Surge demand is high — stay alert.",
-      time: "3 days ago", timeGroup: "week", read: true, href: "/waitlist",
-    },
-    {
-      id: "c8", category: "bookings",
-      icon: <Zap className="h-4 w-4" />, iconBg: "bg-orange-100 text-orange-500",
-      title: "Surge Pricing Active — CBD",
-      body: "Demand is 2.1× in CBD right now. Pre-book your regular spot to lock in your usual rate.",
-      time: "Last week", timeGroup: "earlier", read: true, href: "/map",
-    },
-  ];
+function timeFromBooking(id: number, date: string): { time: string; timeGroup: "today" | "week" | "earlier"; read: boolean } {
+  const diff = Math.max(0, Math.floor((Date.now() - new Date(date + "T12:00:00").getTime()) / 86400000));
+  let time: string;
+  let timeGroup: "today" | "week" | "earlier";
 
-  const owner: Notification[] = [
-    {
-      id: "o1", category: "bookings",
-      icon: <Car className="h-4 w-4" />, iconBg: "bg-blue-100 text-blue-600",
-      title: "New Booking Request",
-      body: seed === 0
-        ? "Amara K. wants to park today 2 PM – 6 PM at your Westlands spot. KES 800 + 15% fee."
-        : "Brian O. requests Friday 8 AM – 5 PM. KES 1,350 pending your approval.",
-      time: "15 min ago", timeGroup: "today", read: false, href: "/owner/bookings",
-    },
-    {
-      id: "o2", category: "payouts",
-      icon: <Wallet className="h-4 w-4" />, iconBg: "bg-emerald-100 text-emerald-600",
-      title: "Payout Processed",
-      body: "KES 4,250 has been sent to your M-Pesa (+254 7** ***321) for 6 bookings this week.",
-      time: "2 hrs ago", timeGroup: "today", read: false, href: "/owner/payouts",
-    },
-    {
-      id: "o3", category: "ratings",
-      icon: <Star className="h-4 w-4" />, iconBg: "bg-yellow-100 text-yellow-600",
-      title: "New Review on Your Spot",
-      body: "\"Great location, easy access.\" — Commuter gave your Kilimani spot ★★★★★.",
-      time: "4 hrs ago", timeGroup: "today", read: true, href: "/owner/spots",
-    },
-    {
-      id: "o4", category: "bookings",
-      icon: <CheckCircle2 className="h-4 w-4" />, iconBg: "bg-emerald-100 text-emerald-600",
-      title: "Booking Auto-Confirmed",
-      body: "Mpesa payment received from Faith N. for tomorrow 7 AM – 9 AM. KES 340 net to you.",
-      time: "6 hrs ago", timeGroup: "today", read: true, href: "/owner/bookings",
-    },
-    {
-      id: "o5", category: "bookings",
-      icon: <Zap className="h-4 w-4" />, iconBg: "bg-orange-100 text-orange-500",
-      title: "Surge Pricing Activated",
-      body: "Demand in your zone is 1.8× normal. Your spot is earning 80% more per hour right now.",
-      time: "Yesterday", timeGroup: "week", read: true,
-    },
-    {
-      id: "o6", category: "payouts",
-      icon: <Wallet className="h-4 w-4" />, iconBg: "bg-emerald-100 text-emerald-600",
-      title: "Weekly Earnings Summary",
-      body: `You earned KES ${(seed === 2 ? 12400 : seed === 1 ? 9800 : 15650).toLocaleString()} this week across your ${seed + 2} active spots. Up 12% vs last week.`,
-      time: "2 days ago", timeGroup: "week", read: true, href: "/owner/payouts",
-    },
-    {
-      id: "o7", category: "bookings",
-      icon: <AlertCircle className="h-4 w-4" />, iconBg: "bg-red-100 text-red-500",
-      title: "No-Show Reported",
-      body: "A commuter did not arrive for their 10 AM slot. The booking has been marked as no-show. No charge applied.",
-      time: "3 days ago", timeGroup: "week", read: true,
-    },
-    {
-      id: "o8", category: "ratings",
-      icon: <Star className="h-4 w-4" />, iconBg: "bg-yellow-100 text-yellow-600",
-      title: "Your Rating Improved",
-      body: "Your average spot rating is now 4.7 ★ — up from 4.5 last month. Keep it up!",
-      time: "Last week", timeGroup: "earlier", read: true, href: "/owner/spots",
-    },
-    {
-      id: "o9", category: "payouts",
-      icon: <MapPin className="h-4 w-4" />, iconBg: "bg-primary/10 text-primary",
-      title: "Platform Fee Reminder",
-      body: "ParkEase retains 15% of each transaction as platform fee. Your net earnings for last month: KES 42,300.",
-      time: "Last week", timeGroup: "earlier", read: true, href: "/owner/payouts",
-    },
-  ];
+  if (diff === 0) {
+    const mins = 5 + (id % 55);
+    time = mins < 60 ? `${mins} min ago` : `${Math.floor(mins / 60)}h ago`;
+    timeGroup = "today";
+  } else if (diff === 1) {
+    time = "Yesterday";
+    timeGroup = "week";
+  } else if (diff <= 7) {
+    time = `${diff} days ago`;
+    timeGroup = "week";
+  } else {
+    time = diff < 21 ? "Last week" : `${Math.floor(diff / 7)} weeks ago`;
+    timeGroup = "earlier";
+  }
 
-  const result: Notification[] = [];
-  if (isCommuter) result.push(...commuter);
-  if (isOwner) result.push(...owner);
-  return result;
+  const read = diff > 1 || (diff === 0 && id % 4 === 0);
+  return { time, timeGroup, read };
+}
+
+type BookingItem = {
+  id: number;
+  spotTitle: string;
+  spotAddress?: string;
+  date: string;
+  startHour: number;
+  endHour: number;
+  totalAmount: number;
+  ownerEarning: number;
+  mpesaCode?: string;
+  commuterName?: string;
+  status: string;
+  surgeMultiplier?: number;
+};
+
+function commuterNotifs(bookings: BookingItem[]): Notification[] {
+  return bookings.flatMap((b): Notification[] => {
+    const { time, timeGroup, read } = timeFromBooking(b.id, b.date);
+    const window = `${fmtHour(b.startHour)}–${fmtHour(b.endHour)}`;
+
+    switch (b.status) {
+      case "pending":
+        return [{
+          id: `c-${b.id}-pending`,
+          category: "bookings" as const,
+          icon: <Clock className="h-4 w-4" />,
+          iconBg: "bg-amber-100 text-amber-600",
+          title: "Booking Pending Approval",
+          body: `Your request for ${b.spotTitle} on ${b.date} (${window}) is awaiting owner confirmation. KES ${b.totalAmount.toLocaleString()} total.`,
+          time, timeGroup, read: false, href: "/bookings",
+        }];
+      case "confirmed":
+        return [{
+          id: `c-${b.id}-confirmed`,
+          category: "bookings" as const,
+          icon: <CheckCircle2 className="h-4 w-4" />,
+          iconBg: "bg-emerald-100 text-emerald-600",
+          title: "Booking Confirmed!",
+          body: `${b.spotTitle} is confirmed for ${b.date}, ${window}.${b.mpesaCode ? ` Show Mpesa code ${b.mpesaCode} on arrival.` : ""}${b.surgeMultiplier && b.surgeMultiplier > 1 ? ` (${b.surgeMultiplier}× surge active)` : ""}`,
+          time, timeGroup, read, href: "/bookings",
+        }];
+      case "completed":
+        return [{
+          id: `c-${b.id}-rate`,
+          category: "ratings" as const,
+          icon: <Star className="h-4 w-4" />,
+          iconBg: "bg-yellow-100 text-yellow-600",
+          title: "Rate Your Recent Visit",
+          body: `How was ${b.spotTitle}? Your honest review helps other commuters and rewards great owners.`,
+          time, timeGroup, read: timeGroup !== "today", href: "/bookings",
+        }];
+      case "cancelled":
+        return [{
+          id: `c-${b.id}-cancelled`,
+          category: "bookings" as const,
+          icon: <XCircle className="h-4 w-4" />,
+          iconBg: "bg-red-100 text-red-500",
+          title: "Booking Declined",
+          body: `The owner of ${b.spotTitle} declined your request for ${b.date}. Browse similar spots nearby on the map.`,
+          time, timeGroup, read: true, href: "/map",
+        }];
+      case "no_show":
+        return [{
+          id: `c-${b.id}-noshow`,
+          category: "bookings" as const,
+          icon: <AlertCircle className="h-4 w-4" />,
+          iconBg: "bg-gray-100 text-gray-500",
+          title: "No-Show Recorded",
+          body: `Your booking at ${b.spotTitle} on ${b.date} was marked as no-show by the owner.`,
+          time, timeGroup, read: true,
+        }];
+      default:
+        return [];
+    }
+  });
+}
+
+function ownerNotifs(bookings: BookingItem[]): Notification[] {
+  return bookings.flatMap((b): Notification[] => {
+    const { time, timeGroup, read } = timeFromBooking(b.id, b.date);
+    const window = `${fmtHour(b.startHour)}–${fmtHour(b.endHour)}`;
+    const name = b.commuterName ?? "A commuter";
+    const net = `KES ${b.ownerEarning.toLocaleString()}`;
+
+    switch (b.status) {
+      case "pending":
+        return [{
+          id: `o-${b.id}-pending`,
+          category: "bookings" as const,
+          icon: <Car className="h-4 w-4" />,
+          iconBg: "bg-blue-100 text-blue-600",
+          title: "New Booking Request",
+          body: `${name} wants to park at ${b.spotTitle} on ${b.date}, ${window}. KES ${b.totalAmount.toLocaleString()} pending your approval.`,
+          time, timeGroup, read: false, href: "/owner/bookings",
+        }];
+      case "confirmed":
+        return [{
+          id: `o-${b.id}-confirmed`,
+          category: "bookings" as const,
+          icon: <CheckCircle2 className="h-4 w-4" />,
+          iconBg: "bg-emerald-100 text-emerald-600",
+          title: "Mpesa Payment Received",
+          body: `${name} paid KES ${b.totalAmount.toLocaleString()} for ${b.spotTitle} on ${b.date}. You earn ${net} after the 15% platform fee.`,
+          time, timeGroup, read, href: "/owner/bookings",
+        }];
+      case "completed":
+        return [
+          {
+            id: `o-${b.id}-payout`,
+            category: "payouts" as const,
+            icon: <Wallet className="h-4 w-4" />,
+            iconBg: "bg-emerald-100 text-emerald-600",
+            title: "Payout Ready",
+            body: `${net} from ${name}'s booking at ${b.spotTitle} (${b.date}) has been processed to your Mpesa.`,
+            time, timeGroup, read, href: "/owner/payouts",
+          },
+          {
+            id: `o-${b.id}-rate`,
+            category: "ratings" as const,
+            icon: <Star className="h-4 w-4" />,
+            iconBg: "bg-yellow-100 text-yellow-600",
+            title: "Rate Your Commuter",
+            body: `How was ${name} as a guest at ${b.spotTitle}? Your rating helps build a trusted community.`,
+            time, timeGroup, read: timeGroup !== "today", href: "/owner/bookings",
+          },
+        ];
+      case "cancelled":
+        return [{
+          id: `o-${b.id}-cancelled`,
+          category: "bookings" as const,
+          icon: <XCircle className="h-4 w-4" />,
+          iconBg: "bg-red-100 text-red-500",
+          title: "Booking Cancelled",
+          body: `${name}'s booking at ${b.spotTitle} for ${b.date} (${window}) was cancelled. The slot is now available again.`,
+          time, timeGroup, read: true,
+        }];
+      case "no_show":
+        return [{
+          id: `o-${b.id}-noshow`,
+          category: "bookings" as const,
+          icon: <AlertCircle className="h-4 w-4" />,
+          iconBg: "bg-gray-100 text-gray-500",
+          title: "No-Show Recorded",
+          body: `${name} did not arrive for their booking at ${b.spotTitle} on ${b.date}. The slot has been released.`,
+          time, timeGroup, read: true,
+        }];
+      default:
+        return [];
+    }
+  });
 }
 
 const CATEGORY_LABELS: Record<NotifCategory, string> = {
@@ -173,11 +209,63 @@ const GROUP_LABELS: Record<string, string> = {
   today: "Today", week: "This Week", earlier: "Earlier",
 };
 
+const GROUP_ORDER: Array<"today" | "week" | "earlier"> = ["today", "week", "earlier"];
+
 export default function Notifications() {
   const { userId, role } = useCurrentUser();
   const [, navigate] = useLocation();
   const [tab, setTab] = useState<NotifCategory>("all");
   const [readSet, setReadSet] = useState<Set<string>>(new Set());
+
+  const isOwner = role === "owner" || role === "both";
+  const isCommuter = role === "commuter" || role === "both";
+
+  const { data: commuterData } = useListBookings(
+    { userId: userId ?? undefined, role: "commuter", limit: 30 },
+    { query: { enabled: !!userId && isCommuter, queryKey: ["notifs-commuter", userId] } }
+  );
+
+  const { data: ownerData } = useListBookings(
+    { userId: userId ?? undefined, role: "owner", limit: 30 },
+    { query: { enabled: !!userId && isOwner, queryKey: ["notifs-owner", userId] } }
+  );
+
+  const { data: zoneSummary } = useGetZoneSummary();
+
+  const allNotifs = useMemo(() => {
+    const notifs: Notification[] = [];
+
+    if (isCommuter && commuterData?.bookings) {
+      notifs.push(...commuterNotifs(commuterData.bookings as BookingItem[]));
+    }
+    if (isOwner && ownerData?.bookings) {
+      notifs.push(...ownerNotifs(ownerData.bookings as BookingItem[]));
+    }
+
+    // Surge platform alerts derived from real zone data
+    const surgeZones = (zoneSummary?.zones ?? []).filter((z) => z.surgeMultiplier > 1);
+    surgeZones.slice(0, 2).forEach((z, i) => {
+      notifs.push({
+        id: `surge-${z.zone}`,
+        category: "bookings",
+        icon: <Zap className="h-4 w-4" />,
+        iconBg: "bg-orange-100 text-orange-500",
+        title: "Surge Pricing Active",
+        body: `Demand in ${z.zone} is ${z.surgeMultiplier}× normal right now. ${isCommuter ? "Pre-book to lock in your slot." : "Your spot is earning more per hour."}`,
+        time: `${10 + i * 8} min ago`,
+        timeGroup: "today",
+        read: true,
+        href: isOwner ? undefined : "/map",
+      });
+    });
+
+    // Sort: today first, then by id descending within each group
+    return notifs.sort((a, b) => {
+      const gOrder = GROUP_ORDER.indexOf(a.timeGroup) - GROUP_ORDER.indexOf(b.timeGroup);
+      if (gOrder !== 0) return gOrder;
+      return b.id.localeCompare(a.id);
+    });
+  }, [commuterData, ownerData, zoneSummary, isCommuter, isOwner]);
 
   if (!userId) {
     return (
@@ -189,19 +277,17 @@ export default function Notifications() {
     );
   }
 
-  const allNotifs = buildNotifications(userId, role ?? "commuter");
   const filtered = tab === "all" ? allNotifs : allNotifs.filter((n) => n.category === tab);
   const unreadCount = allNotifs.filter((n) => !n.read && !readSet.has(n.id)).length;
 
   const markAllRead = () => setReadSet(new Set(allNotifs.map((n) => n.id)));
 
-  const groups: Array<{ key: string; items: Notification[] }> = [
-    { key: "today", items: filtered.filter((n) => n.timeGroup === "today") },
-    { key: "week", items: filtered.filter((n) => n.timeGroup === "week") },
-    { key: "earlier", items: filtered.filter((n) => n.timeGroup === "earlier") },
-  ].filter((g) => g.items.length > 0);
+  const groups: Array<{ key: string; items: Notification[] }> = GROUP_ORDER.map((g) => ({
+    key: g,
+    items: filtered.filter((n) => n.timeGroup === g),
+  })).filter((g) => g.items.length > 0);
 
-  const ownerCategories = role === "owner" || role === "both";
+  const showPayouts = isOwner;
 
   return (
     <div className="container mx-auto p-4 max-w-2xl py-8">
@@ -233,7 +319,7 @@ export default function Notifications() {
       {/* Category tabs */}
       <Tabs value={tab} onValueChange={(v) => setTab(v as NotifCategory)} className="mb-5">
         <TabsList className="w-full flex gap-1 h-auto p-1 bg-muted/60 flex-wrap">
-          {(["all", "bookings", "ratings", ownerCategories && "payouts", "waitlist"].filter(Boolean) as NotifCategory[]).map((cat) => {
+          {(["all", "bookings", "ratings", showPayouts && "payouts", isCommuter && "waitlist"].filter(Boolean) as NotifCategory[]).map((cat) => {
             const count = cat === "all"
               ? allNotifs.filter((n) => !n.read && !readSet.has(n.id)).length
               : allNotifs.filter((n) => n.category === cat && !n.read && !readSet.has(n.id)).length;
